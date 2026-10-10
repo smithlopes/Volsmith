@@ -385,7 +385,7 @@ save(fig, "line_chart.png")
 ```python
 from chart_style import *
 
-cats = ["Equities", "Credit", "Rates", "FX", "Commodities"]
+cats = ["Equities", "Credit", "Rates", "FX", "Commodities Markets"]
 vals = [12.4, -5.1, 8.7, 3.2, -2.6]
 
 fig, ax = setup()

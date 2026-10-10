@@ -122,7 +122,7 @@ SECTORS = {
 # =====================================================================
 
 BENCHMARKS = {
-    "Broad Commodities": "PDBC",
+    "Broad Commodities Markets": "PDBC",
     "Energy Basket": "DBE",
     "Industrial Metals Basket": "DBB",
     "Agriculture Basket": "DBA",
@@ -1640,7 +1640,7 @@ ax.text(
     -y_axis_label_column_width
     + 0.15,
     -0.5,
-    "Commodities",
+    "Commodities Markets",
     ha="left",
     va="center",
     fontsize=16,
@@ -1948,15 +1948,21 @@ fig.text(
 # DATA NOTE
 # =====================================================================
 
+
 data_note = (
     "Notes: Returns are calculated from Yahoo Finance daily closing "
     "prices in USD. Commodity rows use continuous front-month futures "
-    "contracts, so returns are price returns that include contract-roll "
-    "effects and exclude collateral yield. Basket rows are "
-    "exchange-traded product proxies. The latest month may be "
-    "incomplete. Annualized volatility is calculated from daily "
-    "closing-price returns using a 252-trading-day convention."
+    "contracts, so returns reflect futures price movements and "
+    "contract-roll effects, excluding collateral yield. Basket rows "
+    "represent exchange-traded product proxies, whose returns may "
+    "differ from underlying spot prices due to fees, tracking error, "
+    "and implementation effects. Returns may exclude distributions "
+    "and other income not reflected in closing prices. The latest "
+    "month may be incomplete. Annualized volatility is calculated "
+    "from daily closing-price returns using the standard deviation "
+    "and a 252-trading-day annualization convention."
 )
+
 
 data_note_font_size = 16
 
@@ -1968,6 +1974,8 @@ data_note_first_line_y_position = NOTE_Y
 
 data_note_second_line_y_position = NOTE_Y - NOTE_LINE_SPACING
 
+data_note_third_line_y_position = NOTE_Y - (2 * NOTE_LINE_SPACING)
+
 fig.canvas.draw()
 
 data_note_lines = wrap_text_to_figure_width(
@@ -1978,12 +1986,27 @@ data_note_lines = wrap_text_to_figure_width(
     style="italic",
 )
 
-if data_note_lines:
+while len(data_note_lines) > 3 and data_note_font_size > 12:
+    data_note_font_size -= 0.5
+    data_note_lines = wrap_text_to_figure_width(
+        data_note,
+        common_left_position,
+        common_right_position,
+        fontsize=data_note_font_size,
+        style="italic",
+    )
 
+data_note_y_positions = [
+    data_note_first_line_y_position,
+    data_note_second_line_y_position,
+    data_note_third_line_y_position,
+]
+
+for line, y_position in zip(data_note_lines, data_note_y_positions):
     fig.text(
         common_left_position,
-        data_note_first_line_y_position,
-        data_note_lines[0],
+        y_position,
+        line,
         ha="left",
         va="bottom",
         fontsize=data_note_font_size,
@@ -1991,22 +2014,6 @@ if data_note_lines:
         color=data_note_color,
         alpha=data_note_alpha,
     )
-
-    if len(data_note_lines) >= 2:
-
-        fig.text(
-            common_left_position,
-            data_note_second_line_y_position,
-            " ".join(
-                data_note_lines[1:]
-            ),
-            ha="left",
-            va="bottom",
-            fontsize=data_note_font_size,
-            style="italic",
-            color=data_note_color,
-            alpha=data_note_alpha,
-        )
 
 
 

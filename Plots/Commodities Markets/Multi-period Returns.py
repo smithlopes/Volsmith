@@ -136,7 +136,7 @@ SECTORS = {
 # =====================================================================
 
 BENCHMARKS = {
-    "Broad Commodities": "PDBC",
+    "Broad Commodities Markets": "PDBC",
     "Energy Basket": "DBE",
     "Industrial Metals Basket": "DBB",
     "Agriculture Basket": "DBA",
@@ -207,7 +207,7 @@ download_start_date = (
 download_end_date = today
 
 chart_title = (
-    "Commodities Multi-Period Returns"
+    "Global Commodities Markets Multi-Period Returns"
 )
 
 # =====================================================================
@@ -769,7 +769,7 @@ common_right_position = 0.97
 maximum_label_width_pixels = 0.0
 
 for label in [
-    "Commodities",
+    "Commodities Markets",
     *heatmap_df.index,
 ]:
 
@@ -1024,7 +1024,7 @@ ax.text(
     -y_axis_label_column_width
     + label_text_offset,
     -0.5,
-    "Commodities",
+    "Commodities Markets",
     ha="left",
     va="center",
     fontsize=16,
@@ -1239,18 +1239,31 @@ fig.text(
 # DATA NOTE
 # =====================================================================
 
+
 data_note = (
-    "Notes: Returns are cumulative holding-period returns based on "
-    "continuous front-month commodity futures and are not annualized. "
-    "Observation dates may vary by contract, and basket rows are "
-    "exchange-traded product proxies."
+    "Notes: Returns are calculated from Yahoo Finance daily closing "
+    "prices in USD. Commodity rows use continuous front-month futures "
+    "contracts, so returns reflect futures price movements and "
+    "contract-roll effects, excluding collateral yield. Basket rows "
+    "represent exchange-traded product proxies, whose returns may "
+    "differ from underlying spot prices due to fees, tracking error, "
+    "and implementation effects. Returns may exclude distributions "
+    "and other income not reflected in closing prices. The latest "
+    "month may be incomplete."
 )
+
 
 data_note_font_size = 16
 
 data_note_color = "#7d8597"
 
 data_note_alpha = 1
+
+data_note_y_positions = [
+    NOTE_Y,
+    NOTE_Y - NOTE_LINE_SPACING,
+    NOTE_Y - (2 * NOTE_LINE_SPACING),
+]
 
 data_note_lines = wrap_text_to_figure_width(
     data_note,
@@ -1260,12 +1273,21 @@ data_note_lines = wrap_text_to_figure_width(
     style="italic",
 )
 
-if data_note_lines:
+while len(data_note_lines) > 3 and data_note_font_size > 12:
+    data_note_font_size -= 0.5
+    data_note_lines = wrap_text_to_figure_width(
+        data_note,
+        common_left_position,
+        common_right_position,
+        fontsize=data_note_font_size,
+        style="italic",
+    )
 
+for line, y_position in zip(data_note_lines, data_note_y_positions):
     fig.text(
         common_left_position,
-        NOTE_Y,
-        data_note_lines[0],
+        y_position,
+        line,
         ha="left",
         va="bottom",
         fontsize=data_note_font_size,
@@ -1273,22 +1295,6 @@ if data_note_lines:
         color=data_note_color,
         alpha=data_note_alpha,
     )
-
-    if len(data_note_lines) >= 2:
-
-        fig.text(
-            common_left_position,
-            NOTE_Y - NOTE_LINE_SPACING,
-            " ".join(
-                data_note_lines[1:]
-            ),
-            ha="left",
-            va="bottom",
-            fontsize=data_note_font_size,
-            style="italic",
-            color=data_note_color,
-            alpha=data_note_alpha,
-        )
 
 # =====================================================================
 # Confirm Font Used
