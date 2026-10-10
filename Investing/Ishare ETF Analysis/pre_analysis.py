@@ -92,7 +92,11 @@ def analyse_fund(ticker: str, d: dict) -> dict:
 
 
 def build_summary(data: dict) -> pd.DataFrame:
-    return pd.DataFrame([analyse_fund(t, d) for t, d in data.items()]).set_index("Fund")
+    return (
+        pd.DataFrame([analyse_fund(t, d) for t, d in data.items()])
+        .set_index("Fund")
+        .sort_values("CAGR", ascending=False, na_position="last")
+    )
 
 
 def build_correlation_matrix(data: dict) -> pd.DataFrame:
