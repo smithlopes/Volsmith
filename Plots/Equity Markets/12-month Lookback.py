@@ -355,26 +355,74 @@ print(
 )
 
 download_started = time.perf_counter()
+download_start_str = download_start_date.strftime(
+    "%Y-%m-%d"
+)
+download_end_str = download_end_date.strftime(
+    "%Y-%m-%d"
+)
 
 try:
 
     downloaded_data = msci.get_levels(
         unique_index_codes,
-        download_start_date.strftime(
-            "%Y-%m-%d"
-        ),
-        download_end_date.strftime(
-            "%Y-%m-%d"
-        ),
+        download_start_str,
+        download_end_str,
         MSCI_RETURN_VARIANT,
     )
 
-except Exception as error:
+except Exception as batch_error:
 
-    raise RuntimeError(
-        f"The batched MSCI data request failed. "
-        f"Original error: {error}"
-    ) from error
+    print(
+        "The batched MSCI request failed; retrying each index separately. "
+        f"Original error: {batch_error}"
+    )
+
+    individual_results = []
+
+    for position, index_code in enumerate(unique_index_codes):
+
+        try:
+
+            index_data = msci.get_levels(
+                index_code,
+                download_start_str,
+                download_end_str,
+                MSCI_RETURN_VARIANT,
+            )
+
+            if index_data is not None and not index_data.empty:
+                individual_results.append(index_data)
+            else:
+                print(
+                    f"No MSCI data returned for index {index_code}; "
+                    "continuing with the remaining indices."
+                )
+
+        except Exception as index_error:
+
+            affected_names = index_code_to_names.get(
+                index_code,
+                [index_code],
+            )
+            print(
+                f"Skipping {', '.join(affected_names)} "
+                f"(index {index_code}): {index_error}"
+            )
+
+        if position < len(unique_index_codes) - 1:
+            time.sleep(0.5)
+
+    if not individual_results:
+        raise RuntimeError(
+            "The batched MSCI request failed and individual retries "
+            "returned no usable data."
+        ) from batch_error
+
+    downloaded_data = pd.concat(
+        individual_results,
+        ignore_index=True,
+    )
 
 download_seconds = (
     time.perf_counter()
