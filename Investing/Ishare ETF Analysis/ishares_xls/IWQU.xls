@@ -43,12 +43,12 @@
 </ss:Row>
 <ss:Row>
 <ss:Cell>
-<ss:Data ss:Type="String">NAV as of 08/Oct/2026</ss:Data>
+<ss:Data ss:Type="String">NAV as of 09/Oct/2026</ss:Data>
 </ss:Cell>
 </ss:Row>
 <ss:Row>
 <ss:Cell>
-<ss:Data ss:Type="String">USD 90.10</ss:Data>
+<ss:Data ss:Type="String">USD 90.67</ss:Data>
 </ss:Cell>
 </ss:Row>
 <ss:Row>
@@ -59,12 +59,12 @@
 <ss:Row></ss:Row>
 <ss:Row>
 <ss:Cell>
-<ss:Data ss:Type="String">1 Day NAV Change as of 08/Oct/2026</ss:Data>
+<ss:Data ss:Type="String">1 Day NAV Change as of 09/Oct/2026</ss:Data>
 </ss:Cell>
 </ss:Row>
 <ss:Row>
 <ss:Cell>
-<ss:Data ss:Type="String">USD 0.00(0.00%)</ss:Data>
+<ss:Data ss:Type="String">USD 0.57(0.63%)</ss:Data>
 </ss:Cell>
 </ss:Row>
 <ss:Row>
@@ -652,6 +652,15 @@ The return of your investment may increase or decrease as a result of currency f
 <ss:Cell ss:Index="5" ss:StyleID="Header">
 <ss:Data ss:Type="String">Historical NAVs</ss:Data>
 </ss:Cell>
+</ss:Row>
+<ss:Row>
+<ss:Cell>
+<ss:Data ss:Type="String">09/Oct/2026</ss:Data>
+</ss:Cell>
+<ss:Cell>
+<ss:Data ss:Type="String">90.67</ss:Data>
+</ss:Cell>
+<ss:Cell/><ss:Cell/>
 </ss:Row>
 <ss:Row>
 <ss:Cell>
@@ -62609,10 +62618,10 @@ The return of your investment may increase or decrease as a result of currency f
 <ss:Data ss:Type="String">Net Assets</ss:Data>
 </ss:Cell>
 <ss:Cell ss:StyleID="Left">
-<ss:Data ss:Type="String">USD 6,559,574,824</ss:Data>
+<ss:Data ss:Type="String">USD 6,600,854,840</ss:Data>
 </ss:Cell>
 <ss:Cell ss:StyleID="AsOfDate">
-<ss:Data ss:Type="String">as of 08/Oct/2026</ss:Data>
+<ss:Data ss:Type="String">as of 09/Oct/2026</ss:Data>
 </ss:Cell>
 </ss:Row>
 <ss:Row>
@@ -62620,10 +62629,10 @@ The return of your investment may increase or decrease as a result of currency f
 <ss:Data ss:Type="String">Net Assets of Fund</ss:Data>
 </ss:Cell>
 <ss:Cell ss:StyleID="Left">
-<ss:Data ss:Type="String">USD 6,559,574,824</ss:Data>
+<ss:Data ss:Type="String">USD 6,600,854,840</ss:Data>
 </ss:Cell>
 <ss:Cell ss:StyleID="AsOfDate">
-<ss:Data ss:Type="String">as of 08/Oct/2026</ss:Data>
+<ss:Data ss:Type="String">as of 09/Oct/2026</ss:Data>
 </ss:Cell>
 </ss:Row>
 <ss:Row>
@@ -62690,7 +62699,7 @@ The return of your investment may increase or decrease as a result of currency f
 <ss:Data ss:Type="String">72,800,000</ss:Data>
 </ss:Cell>
 <ss:Cell ss:StyleID="AsOfDate">
-<ss:Data ss:Type="String">as of 08/Oct/2026</ss:Data>
+<ss:Data ss:Type="String">as of 09/Oct/2026</ss:Data>
 </ss:Cell>
 </ss:Row>
 <ss:Row>
@@ -62860,10 +62869,10 @@ The return of your investment may increase or decrease as a result of currency f
 <ss:Data ss:Type="String">Benchmark Level</ss:Data>
 </ss:Cell>
 <ss:Cell ss:StyleID="Left">
-<ss:Data ss:Type="String">USD 3,629.77</ss:Data>
+<ss:Data ss:Type="String">USD 3,652.52</ss:Data>
 </ss:Cell>
 <ss:Cell ss:StyleID="AsOfDate">
-<ss:Data ss:Type="String">as of 08/Oct/2026</ss:Data>
+<ss:Data ss:Type="String">as of 09/Oct/2026</ss:Data>
 </ss:Cell>
 </ss:Row>
 <ss:Row>
