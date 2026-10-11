@@ -10,8 +10,32 @@ from etf_loader import load_all
 # ---------------- settings ----------------
 RF_ANNUAL = 0.04                 # risk-free rate for Sharpe/Sortino (e.g. 0.04 = 4%)
 ANNUALISE_MULTI_YEAR_ROLLS = False   # 3Y rolling returns shown as annualised (CAGR) if True
-REFRESH = False                  # False = use the files already saved, no download
+REFRESH = True                  # False = use the files already saved, no download
+USE_COMMON_START_DATE = True    # True = compare all funds from the latest NAV start date
 # ------------------------------------------
+
+
+def select_analysis_period(data: dict, use_common_start: bool) -> tuple[dict, pd.Timestamp | None]:
+    """Return data clipped to a common NAV start, or unchanged for full histories."""
+    prepared = {}
+    first_dates = []
+    for ticker, fund in data.items():
+        nav = fund["nav"].copy()
+        if not nav.empty:
+            nav["Date"] = pd.to_datetime(nav["Date"])
+            nav = nav.sort_values("Date")
+            first_dates.append(nav["Date"].iloc[0])
+        prepared[ticker] = {**fund, "nav": nav}
+
+    if not use_common_start:
+        return prepared, None
+    if not first_dates:
+        raise ValueError("Cannot select a common analysis period: no NAV history was loaded.")
+
+    common_start = max(first_dates)
+    for fund in prepared.values():
+        fund["nav"] = fund["nav"].loc[fund["nav"]["Date"] >= common_start].reset_index(drop=True)
+    return prepared, common_start
 
 
 def rolling_returns(nav: pd.Series, years: int, annualise: bool) -> pd.Series:
@@ -73,6 +97,7 @@ def analyse_fund(ticker: str, d: dict) -> dict:
         "Fund": ticker,
         "Type": "ETC" if (d.get("asset_class") or "").lower() == "commodity" else "ETF",
         "Years of Data": round(years, 2),
+        "Analysis Start Date": nav.index[0].date(),
         "Inception Date": incep.date(),
         "Total Return": total_ret,
         "CAGR": cagr,
@@ -92,11 +117,19 @@ def analyse_fund(ticker: str, d: dict) -> dict:
 
 
 def build_summary(data: dict) -> pd.DataFrame:
-    return (
+    summary = (
         pd.DataFrame([analyse_fund(t, d) for t, d in data.items()])
         .set_index("Fund")
         .sort_values("CAGR", ascending=False, na_position="last")
     )
+    if USE_COMMON_START_DATE:
+        # Show the shared analysis start in place of each fund's inception.
+        # Years of Data remains and reflects the common analysis window.
+        summary = summary.drop(columns=["Inception Date"])
+    else:
+        # Full-history mode shows each fund's own inception date only.
+        summary = summary.drop(columns=["Analysis Start Date"])
+    return summary
 
 
 def build_correlation_matrix(data: dict) -> pd.DataFrame:
@@ -109,7 +142,12 @@ def build_correlation_matrix(data: dict) -> pd.DataFrame:
 
 
 if __name__ == "__main__":
-    data = load_all(refresh=REFRESH)
+    loaded_data = load_all(refresh=REFRESH)
+    data, common_start = select_analysis_period(loaded_data, USE_COMMON_START_DATE)
+    if USE_COMMON_START_DATE:
+        print(f"Using a common analysis period from {common_start.date()}.")
+    else:
+        print("Using each fund's full available history; correlations use overlapping dates per pair.")
     summary = build_summary(data)
 
     pct_cols = ["Total Return", "CAGR", "Ann. SD", "Max DD",
