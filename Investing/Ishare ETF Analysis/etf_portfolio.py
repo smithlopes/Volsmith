@@ -194,15 +194,11 @@ def build_performance_table(data: dict, weights: dict[str, float]) -> tuple[pd.D
     return pd.DataFrame(rows).set_index("Asset"), returns
 
 
-def optimize_max_sharpe(
-    returns: pd.DataFrame,
-    risk_free_rate: float = RISK_FREE_RATE_ANNUAL,
-) -> tuple[pd.Series, dict[str, float]]:
-    """Find long-only, fully invested Markowitz weights maximizing Sharpe ratio.
+def optimize_max_calmar(returns: pd.DataFrame) -> tuple[pd.Series, dict[str, float]]:
+    """Find long-only, fully invested weights maximizing historical Calmar.
 
-    Expected returns and covariance are estimated from the supplied daily
-    returns and annualized with the 252-trading-day convention. This is the
-    maximum-Sharpe (tangency) portfolio, not a forecast or guaranteed optimum.
+    The objective is annualized portfolio return divided by absolute maximum
+    drawdown, calculated from the portfolio's daily rebalanced return series.
     """
     if returns.empty or returns.shape[1] == 0:
         raise ValueError("Cannot optimize: no return observations or funds are available.")
@@ -210,20 +206,32 @@ def optimize_max_sharpe(
         raise ValueError("Cannot optimize: return series must share the same complete dates.")
 
     tickers = list(returns.columns)
-    expected_returns = returns.mean().to_numpy() * TRADING_DAYS_PER_YEAR
-    covariance = returns.cov().to_numpy() * TRADING_DAYS_PER_YEAR
-    covariance = (covariance + covariance.T) / 2  # remove floating-point asymmetry
     number_of_funds = len(tickers)
     cap = MAX_OPTIMAL_FUND_WEIGHT
     if cap <= 0 or cap * number_of_funds < 1 - 1e-10:
         raise ValueError("MAX_OPTIMAL_FUND_WEIGHT is too small to allocate 100% across the funds.")
 
-    def negative_sharpe(weights: np.ndarray) -> float:
-        variance = float(weights @ covariance @ weights)
-        if variance <= 1e-16:
-            return 1e6
-        portfolio_return = float(weights @ expected_returns)
-        return -(portfolio_return - risk_free_rate) / np.sqrt(variance)
+    daily_returns = returns.to_numpy(dtype=float)
+    elapsed_days = (returns.index[-1] - returns.index[0]).days if len(returns.index) > 1 else 0
+    years = elapsed_days / 365.25 if elapsed_days > 0 else len(returns) / TRADING_DAYS_PER_YEAR
+
+    def calmar_stats(weights: np.ndarray) -> tuple[float, float, float, float]:
+        portfolio_daily = daily_returns @ weights
+        wealth = np.concatenate(([1.0], np.cumprod(1.0 + portfolio_daily)))
+        cagr = float(wealth[-1] ** (1 / years) - 1) if years > 0 and wealth[-1] > 0 else np.nan
+        drawdown = wealth / np.maximum.accumulate(wealth) - 1.0
+        max_drawdown = float(drawdown.min())
+        annual_volatility = float(np.std(portfolio_daily, ddof=1) * np.sqrt(TRADING_DAYS_PER_YEAR))
+        calmar = cagr / abs(max_drawdown) if max_drawdown < -1e-12 else np.nan
+        return cagr, annual_volatility, max_drawdown, calmar
+
+    def negative_calmar(weights: np.ndarray) -> float:
+        _, _, _, calmar = calmar_stats(weights)
+        if np.isfinite(calmar):
+            return -calmar
+        # Avoid division by zero for a zero-drawdown path.
+        cagr, _, _, _ = calmar_stats(weights)
+        return -1e6 if np.isfinite(cagr) and cagr > 0 else 1e6
 
     constraints = ({"type": "eq", "fun": lambda weights: np.sum(weights) - 1.0},)
     bounds = [(0.0, cap)] * number_of_funds
@@ -235,7 +243,7 @@ def optimize_max_sharpe(
     candidates = []
     for start in starting_points:
         result = minimize(
-            negative_sharpe,
+            negative_calmar,
             start,
             method="SLSQP",
             bounds=bounds,
@@ -245,18 +253,19 @@ def optimize_max_sharpe(
         if result.success and np.isfinite(result.fun):
             candidates.append(result)
     if not candidates:
-        raise RuntimeError("Maximum-Sharpe optimization did not converge. Check the return data.")
+        raise RuntimeError("Maximum-Calmar optimization did not converge. Check the return data.")
 
     best = min(candidates, key=lambda result: result.fun)
     optimal_weights = pd.Series(best.x, index=tickers, name="Optimal Weight").clip(lower=0)
     optimal_weights /= optimal_weights.sum()
-    portfolio_return = float(optimal_weights.to_numpy() @ expected_returns)
-    portfolio_volatility = float(np.sqrt(optimal_weights.to_numpy() @ covariance @ optimal_weights.to_numpy()))
-    sharpe = (portfolio_return - risk_free_rate) / portfolio_volatility if portfolio_volatility > 0 else np.nan
+    portfolio_return, portfolio_volatility, max_drawdown, calmar = calmar_stats(
+        optimal_weights.to_numpy()
+    )
     metrics = {
-        "Expected Annual Return": portfolio_return,
+        "Historical CAGR": portfolio_return,
         "Annual Volatility": portfolio_volatility,
-        "Sharpe": float(sharpe),
+        "Max Drawdown": max_drawdown,
+        "Calmar": calmar,
     }
     return optimal_weights, metrics
 
@@ -271,13 +280,14 @@ def display_optimal_weights(
         "Optimal Weight": optimal_weights,
     }).fillna(0.0).sort_values("Optimal Weight", ascending=False)
     shown = table.map(lambda value: f"{value:.2%}")
-    print("\nMarkowitz maximum-Sharpe weights (long-only, fully invested):")
+    print("\nMaximum-Calmar weights (long-only, fully invested):")
     print(shown.to_string())
     print(
         "\nOptimized portfolio estimates: "
-        f"return {metrics['Expected Annual Return']:.2%} p.a. | "
+        f"historical CAGR {metrics['Historical CAGR']:.2%} | "
         f"volatility {metrics['Annual Volatility']:.2%} p.a. | "
-        f"Sharpe {metrics['Sharpe']:.2f}"
+        f"max drawdown {metrics['Max Drawdown']:.2%} | "
+        f"Calmar {metrics['Calmar']:.2f}"
     )
 
 
@@ -396,7 +406,7 @@ def main() -> None:
     if inactive_classes:
         print("\nExcluded from optimization (0% asset-class weight): " + ", ".join(inactive_classes))
     optimization_returns = returns[active_tickers]
-    optimal_weights, optimal_metrics = optimize_max_sharpe(optimization_returns)
+    optimal_weights, optimal_metrics = optimize_max_calmar(optimization_returns)
     active_current_weights = {ticker: weights[ticker] for ticker in active_tickers}
     display_optimal_weights(optimal_weights, active_current_weights, optimal_metrics)
 
