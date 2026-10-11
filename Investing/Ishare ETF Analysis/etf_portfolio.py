@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from scipy.optimize import minimize
 
 from etf_loader import load_all
 
@@ -16,8 +17,8 @@ from etf_loader import load_all
 # Tier 1: allocation across asset classes (must sum to 100%).
 ASSET_CLASS_WEIGHTS = {
     "Equity": 0.70,
-    "Commodity": 0.10,
-    "Fixed Income": 0.20,
+    "Commodity": 0.30,
+    "Fixed Income": 0.0,
 }
 
 # Tier 2: fund allocation within each asset class (each class must sum to 100%).
@@ -28,12 +29,14 @@ FUND_WEIGHTS_WITHIN_CLASS = {
         "IWMO": 0.50,
     },
     "Commodity": {
-        "SGLN": 1.00,
+        "SGLN": 0.70,
+        "SSLN": 0.30,
     },
     # These are user-defined model sleeves, not tickers downloaded by etf_loader.
     "Fixed Income": {
-        "FI_BOND": 1.0,
-        "FI_CASH": 0.00,
+        # This within-class split has no effect while Fixed Income allocation is 0%.
+        "FI_BOND": 0.50,
+        "FI_CASH": 0.50,
     },
 }
 
@@ -55,6 +58,7 @@ RISK_FREE_RATE_ANNUAL = 0.04
 REFRESH = True  # Refreshes current holdings; loader falls back to saved files if download fails.
 TOP_HOLDINGS = 10
 TRADING_DAYS_PER_YEAR = 252
+MAX_OPTIMAL_FUND_WEIGHT = 1.0  # Long-only; 1.0 means no tighter per-fund cap.
 
 
 def build_portfolio_weights(data: dict) -> tuple[dict[str, float], pd.DataFrame]:
@@ -190,6 +194,107 @@ def build_performance_table(data: dict, weights: dict[str, float]) -> tuple[pd.D
     return pd.DataFrame(rows).set_index("Asset"), returns
 
 
+def optimize_max_sharpe(
+    returns: pd.DataFrame,
+    risk_free_rate: float = RISK_FREE_RATE_ANNUAL,
+) -> tuple[pd.Series, dict[str, float]]:
+    """Find long-only, fully invested Markowitz weights maximizing Sharpe ratio.
+
+    Expected returns and covariance are estimated from the supplied daily
+    returns and annualized with the 252-trading-day convention. This is the
+    maximum-Sharpe (tangency) portfolio, not a forecast or guaranteed optimum.
+    """
+    if returns.empty or returns.shape[1] == 0:
+        raise ValueError("Cannot optimize: no return observations or funds are available.")
+    if returns.isna().any().any():
+        raise ValueError("Cannot optimize: return series must share the same complete dates.")
+
+    tickers = list(returns.columns)
+    expected_returns = returns.mean().to_numpy() * TRADING_DAYS_PER_YEAR
+    covariance = returns.cov().to_numpy() * TRADING_DAYS_PER_YEAR
+    covariance = (covariance + covariance.T) / 2  # remove floating-point asymmetry
+    number_of_funds = len(tickers)
+    cap = MAX_OPTIMAL_FUND_WEIGHT
+    if cap <= 0 or cap * number_of_funds < 1 - 1e-10:
+        raise ValueError("MAX_OPTIMAL_FUND_WEIGHT is too small to allocate 100% across the funds.")
+
+    def negative_sharpe(weights: np.ndarray) -> float:
+        variance = float(weights @ covariance @ weights)
+        if variance <= 1e-16:
+            return 1e6
+        portfolio_return = float(weights @ expected_returns)
+        return -(portfolio_return - risk_free_rate) / np.sqrt(variance)
+
+    constraints = ({"type": "eq", "fun": lambda weights: np.sum(weights) - 1.0},)
+    bounds = [(0.0, cap)] * number_of_funds
+    initial = np.full(number_of_funds, 1.0 / number_of_funds)
+
+    # Multiple feasible starts reduce dependence on a single local search path.
+    starting_points = [initial]
+    starting_points.extend(np.eye(number_of_funds))
+    candidates = []
+    for start in starting_points:
+        result = minimize(
+            negative_sharpe,
+            start,
+            method="SLSQP",
+            bounds=bounds,
+            constraints=constraints,
+            options={"maxiter": 1000, "ftol": 1e-12},
+        )
+        if result.success and np.isfinite(result.fun):
+            candidates.append(result)
+    if not candidates:
+        raise RuntimeError("Maximum-Sharpe optimization did not converge. Check the return data.")
+
+    best = min(candidates, key=lambda result: result.fun)
+    optimal_weights = pd.Series(best.x, index=tickers, name="Optimal Weight").clip(lower=0)
+    optimal_weights /= optimal_weights.sum()
+    portfolio_return = float(optimal_weights.to_numpy() @ expected_returns)
+    portfolio_volatility = float(np.sqrt(optimal_weights.to_numpy() @ covariance @ optimal_weights.to_numpy()))
+    sharpe = (portfolio_return - risk_free_rate) / portfolio_volatility if portfolio_volatility > 0 else np.nan
+    metrics = {
+        "Expected Annual Return": portfolio_return,
+        "Annual Volatility": portfolio_volatility,
+        "Sharpe": float(sharpe),
+    }
+    return optimal_weights, metrics
+
+
+def display_optimal_weights(
+    optimal_weights: pd.Series,
+    current_weights: dict[str, float],
+    metrics: dict[str, float],
+) -> None:
+    table = pd.DataFrame({
+        "Current Weight": pd.Series(current_weights),
+        "Optimal Weight": optimal_weights,
+    }).fillna(0.0).sort_values("Optimal Weight", ascending=False)
+    shown = table.map(lambda value: f"{value:.2%}")
+    print("\nMarkowitz maximum-Sharpe weights (long-only, fully invested):")
+    print(shown.to_string())
+    print(
+        "\nOptimized portfolio estimates: "
+        f"return {metrics['Expected Annual Return']:.2%} p.a. | "
+        f"volatility {metrics['Annual Volatility']:.2%} p.a. | "
+        f"Sharpe {metrics['Sharpe']:.2f}"
+    )
+
+
+def optimization_universe() -> list[str]:
+    """List configured funds only from asset classes with positive allocation."""
+    selected = []
+    for asset_class, class_weight in ASSET_CLASS_WEIGHTS.items():
+        if class_weight <= 0:
+            continue
+        for ticker in FUND_WEIGHTS_WITHIN_CLASS.get(asset_class, {}):
+            if ticker not in selected:
+                selected.append(ticker)
+    if not selected:
+        raise ValueError("No funds available to optimize: all asset-class weights are zero.")
+    return selected
+
+
 def build_lookthrough_holdings(data: dict, weights: dict[str, float]) -> pd.DataFrame:
     frames = []
     no_holdings = []
@@ -285,6 +390,15 @@ def main() -> None:
         print("  None configured")
     performance, returns = build_performance_table(data, weights)
     display_performance(performance)
+
+    active_tickers = optimization_universe()
+    inactive_classes = [name for name, value in ASSET_CLASS_WEIGHTS.items() if value == 0]
+    if inactive_classes:
+        print("\nExcluded from optimization (0% asset-class weight): " + ", ".join(inactive_classes))
+    optimization_returns = returns[active_tickers]
+    optimal_weights, optimal_metrics = optimize_max_sharpe(optimization_returns)
+    active_current_weights = {ticker: weights[ticker] for ticker in active_tickers}
+    display_optimal_weights(optimal_weights, active_current_weights, optimal_metrics)
 
     print("\nFund daily-return correlation matrix (common dates):")
     correlations = returns.corr().map(lambda value: f"{value:.2f}" if pd.notna(value) else "N/A")
