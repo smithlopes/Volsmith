@@ -26,21 +26,23 @@ SERIES_ID = "A191RL1Q225SBEA"
 SERIES_NAME = "US Real GDP Growth"
 YIELD_SERIES_ID = "DGS10"
 YIELD_SERIES_NAME = "US 10-Year Treasury Yield"
+INFLATION_SERIES_ID = "CPIAUCSL"
+INFLATION_SERIES_NAME = "US CPI Inflation"
 
 # Set either value to a date such as "2016-01-01" to bound the analysis.
 # None uses the full available history on that side of the selected period.
-START_DATE = "2015-01-01"  # Example: "2021-01-01"
+START_DATE = "2021-01-01"  # Example: "2021-01-01"
 END_DATE = None  # Example: "2024-12-31"
 
 SLIDE_TITLE = "How Fast Is the US Economy Growing?"
 SOURCE_TEXT = "Source: US Bureau of Economic Analysis and Federal Reserve via FRED"
 NOTE_TEXT = (
     "Note: GDP is quarter-over-quarter growth in inflation-adjusted output at a "
-    "seasonally adjusted annual rate (SAAR), not year-over-year; negative values "
-    "indicate contraction. Red shading marks runs of at least two consecutive "
-    "negative quarters (a rule of thumb, not official NBER dates). The 10-year "
-    "Treasury yield is a daily constant-maturity market yield, not an investment "
-    "return. GDP is quarterly and revised; yields are daily. Both share a percent scale."
+    "seasonally adjusted annual rate (SAAR); CPI inflation is the 12-month change "
+    "in seasonally adjusted CPI. Red shading marks at least two consecutive "
+    "negative GDP quarters, a rule of thumb rather than official NBER dates. The "
+    "10-year Treasury is a daily constant-maturity market yield. GDP is quarterly "
+    "and revised; CPI is monthly and yields are daily. All series share a percent scale."
 )
 
 OUTPUT_DIR = Path(__file__).resolve().parent
@@ -58,6 +60,7 @@ RIGHT_MARGIN_PX = 1830
 
 BLUE = "#6b8fd1"
 ORANGE = "#e8856a"
+GREEN = "#55a868"
 BG = "#ffffff"
 INK = "#000000"
 SUBTITLE_INK = "#2d2a2a"
@@ -197,8 +200,17 @@ treasury_yield = pd.to_numeric(treasury_yield, errors="coerce").dropna()
 if treasury_yield.empty:
     raise ValueError(f"FRED returned no usable observations for {YIELD_SERIES_ID}.")
 
-available_start = min(growth.index[0], treasury_yield.index[0])
-available_end = max(growth.index[-1], treasury_yield.index[-1])
+print(f"Downloading FRED series {INFLATION_SERIES_ID} ({INFLATION_SERIES_NAME})...")
+cpi = fred.get_series(INFLATION_SERIES_ID).dropna().sort_index()
+cpi.index = pd.to_datetime(cpi.index)
+cpi = pd.to_numeric(cpi, errors="coerce").dropna()
+inflation = cpi.pct_change(periods=12).mul(100).dropna()
+
+if inflation.empty:
+    raise ValueError(f"FRED returned no usable observations for {INFLATION_SERIES_ID}.")
+
+available_start = min(growth.index[0], treasury_yield.index[0], inflation.index[0])
+available_end = max(growth.index[-1], treasury_yield.index[-1], inflation.index[-1])
 start_date = pd.Timestamp(START_DATE) if START_DATE is not None else available_start
 end_date = pd.Timestamp(END_DATE) if END_DATE is not None else available_end
 
@@ -209,9 +221,10 @@ growth = growth.loc[(growth.index >= start_date) & (growth.index <= end_date)]
 treasury_yield = treasury_yield.loc[
     (treasury_yield.index >= start_date) & (treasury_yield.index <= end_date)
 ]
+inflation = inflation.loc[(inflation.index >= start_date) & (inflation.index <= end_date)]
 
-if growth.empty or treasury_yield.empty:
-    raise ValueError("One or both FRED series have no observations in the last ten years.")
+if growth.empty or treasury_yield.empty or inflation.empty:
+    raise ValueError("One or more FRED series have no observations in the selected dates.")
 
 latest_date = growth.index[-1]
 latest_value = float(growth.iloc[-1])
@@ -237,17 +250,20 @@ yield_change_phrase = (
     if yield_change >= 0
     else f"down {abs(yield_change):.1f} percentage points"
 )
+inflation_latest_date = inflation.index[-1]
+inflation_latest_value = float(inflation.iloc[-1])
 subtitle = (
-    f"In {quarter}, US real GDP grew at {latest_value:+.1f}% annualized, "
+    f"Real GDP grew at {latest_value:+.1f}% annualized in {quarter}, "
     f"{change_phrase} from {previous_value:+.1f}% in {previous_quarter}. "
-    f"The 10-year Treasury yield was {yield_latest_value:.1f}% on "
-    f"{yield_latest_date:%d %b %Y}, {yield_change_phrase} from "
-    f"{yield_comparison:.1f}% a year earlier."
+    f"CPI inflation was {inflation_latest_value:.1f}% year-over-year in "
+    f"{inflation_latest_date:%b %Y}; the 10-year Treasury yield was "
+    f"{yield_latest_value:.1f}% on {yield_latest_date:%d %b %Y}."
 )
 
 print(f"Observations: {len(growth)}")
 print(f"Latest observation: {latest_date:%Y-%m-%d} ({latest_value:+.2f}%)")
 print(f"10-year yield latest: {yield_latest_date:%Y-%m-%d} ({yield_latest_value:.2f}%)")
+print(f"CPI inflation latest: {inflation_latest_date:%Y-%m-%d} ({inflation_latest_value:.2f}%)")
 
 
 # =============================================================================
@@ -305,7 +321,7 @@ for line, baseline in zip(wrapped_note, NOTE_BASELINES_PX):
 # =============================================================================
 
 axes_left, axes_right = 205.0, 1798.0
-axes_top, axes_bottom = 220.0, 835.0
+axes_top, axes_bottom = 200.0, 835.0
 ax = fig.add_axes(
     [
         px_x(axes_left),
@@ -322,7 +338,7 @@ for recession_start, recession_end in recession_periods:
         recession_start,
         recession_end,
         facecolor="#d9534f",
-        alpha=0.10,
+        alpha=0.15,
         edgecolor="none",
         zorder=0.1,
     )
@@ -336,7 +352,12 @@ ax.plot(
 ax.plot(
     treasury_yield.index, treasury_yield.to_numpy(dtype=float),
     color=ORANGE, linewidth=2.2, solid_capstyle="round", solid_joinstyle="round", zorder=3,
-    label="US 10-Year Treasury Yield (daily)",
+    label="10-Year Treasury Yield (daily)",
+)
+ax.plot(
+    inflation.index, inflation.to_numpy(dtype=float),
+    color=GREEN, linewidth=2.2, solid_capstyle="round", solid_joinstyle="round", zorder=3,
+    label="CPI Inflation (12-month)",
 )
 ax.set_axisbelow(True)
 ax.grid(
@@ -378,7 +399,7 @@ ax.legend(
     ],
     loc="upper center",
     bbox_to_anchor=(0.5, -0.105),
-    ncol=3,
+    ncol=4,
     frameon=False,
     fontsize=11,
     handlelength=2.2,
