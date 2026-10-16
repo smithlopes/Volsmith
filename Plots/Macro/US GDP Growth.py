@@ -37,12 +37,10 @@ END_DATE = None  # Example: "2024-12-31"
 SLIDE_TITLE = "How Fast Is the US Economy Growing?"
 SOURCE_TEXT = "Source: US Bureau of Economic Analysis and Federal Reserve via FRED"
 NOTE_TEXT = (
-    "Note: GDP is quarter-over-quarter growth in inflation-adjusted output at a "
-    "seasonally adjusted annual rate (SAAR); CPI inflation is the annualized "
-    "quarter-over-quarter change in seasonally adjusted CPI. Red shading marks at least two consecutive "
-    "negative GDP quarters, a rule of thumb rather than official NBER dates. The "
-    "10-year Treasury is a daily constant-maturity market yield. GDP is quarterly "
-    "and revised; CPI is monthly and yields are daily. All series share a percent scale."
+    "Note: GDP is quarterly growth in inflation-adjusted output at a seasonally "
+    "adjusted annual rate; red shading marks 2+ consecutive negative quarters, a "
+    "rule of thumb rather than official recession dates. CPI is annualized quarterly "
+    "inflation; the 10-year Treasury yield is daily. GDP and CPI are revised."
 )
 
 OUTPUT_DIR = Path(__file__).resolve().parent
@@ -254,11 +252,10 @@ yield_change_phrase = (
 inflation_latest_date = inflation.index[-1]
 inflation_latest_value = float(inflation.iloc[-1])
 subtitle = (
-    f"Real GDP grew at {latest_value:+.1f}% annualized in {quarter}, "
-    f"{change_phrase} from {previous_value:+.1f}% in {previous_quarter}. "
-    f"CPI inflation ran at {inflation_latest_value:.1f}% annualized in "
-    f"{inflation_latest_date.to_period('Q')}; the 10-year Treasury yield was "
-    f"{yield_latest_value:.1f}% on {yield_latest_date:%d %b %Y}."
+    f"Real GDP grew {latest_value:+.1f}% annualized in {quarter}, {change_phrase} "
+    f"from {previous_value:+.1f}% in {previous_quarter}. CPI inflation was "
+    f"{inflation_latest_value:.1f}% annualized in {inflation_latest_date.to_period('Q')}; "
+    f"the 10-year yield stood at {yield_latest_value:.1f}% on {yield_latest_date:%d %b %Y}."
 )
 
 print(f"Observations: {len(growth)}")
@@ -276,19 +273,13 @@ fig.text(
     fontsize=TITLE_SIZE, fontweight="bold", color=INK, ha="left", va="baseline",
 )
 
-subtitle_font_size = SUBTITLE_SIZE
 wrapped_subtitle = wrap_to_margins(
-    subtitle, subtitle_font_size, RIGHT_MARGIN_PX - LEFT_MARGIN_PX
+    subtitle, SUBTITLE_SIZE, RIGHT_MARGIN_PX - LEFT_MARGIN_PX
 )
-while len(wrapped_subtitle) > len(SUBTITLE_BASELINES_PX) and subtitle_font_size > 11:
-    subtitle_font_size -= 0.5
-    wrapped_subtitle = wrap_to_margins(
-        subtitle, subtitle_font_size, RIGHT_MARGIN_PX - LEFT_MARGIN_PX
-    )
 for line, baseline in zip(wrapped_subtitle, SUBTITLE_BASELINES_PX):
     fig.text(
         px_x(LEFT_MARGIN_PX), px_y(baseline), line,
-        fontsize=subtitle_font_size, color=SUBTITLE_INK, ha="left", va="baseline",
+        fontsize=SUBTITLE_SIZE, color=SUBTITLE_INK, ha="left", va="baseline",
     )
 
 
@@ -301,19 +292,13 @@ fig.text(
     fontsize=FOOT_SIZE, style="italic", color=FOOT, ha="left", va="baseline",
 )
 
-note_font_size = FOOT_SIZE
 wrapped_note = wrap_to_margins(
-    NOTE_TEXT, note_font_size, RIGHT_MARGIN_PX - LEFT_MARGIN_PX, "italic"
+    NOTE_TEXT, FOOT_SIZE, RIGHT_MARGIN_PX - LEFT_MARGIN_PX, "italic"
 )
-while len(wrapped_note) > len(NOTE_BASELINES_PX) and note_font_size > 8:
-    note_font_size -= 0.5
-    wrapped_note = wrap_to_margins(
-        NOTE_TEXT, note_font_size, RIGHT_MARGIN_PX - LEFT_MARGIN_PX, "italic"
-    )
 for line, baseline in zip(wrapped_note, NOTE_BASELINES_PX):
     fig.text(
         px_x(LEFT_MARGIN_PX), px_y(baseline), line,
-        fontsize=note_font_size, style="italic", color=FOOT, ha="left", va="baseline",
+        fontsize=FOOT_SIZE, style="italic", color=FOOT, ha="left", va="baseline",
     )
 
 
