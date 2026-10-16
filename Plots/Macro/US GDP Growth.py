@@ -38,8 +38,8 @@ SLIDE_TITLE = "How Fast Is the US Economy Growing?"
 SOURCE_TEXT = "Source: US Bureau of Economic Analysis and Federal Reserve via FRED"
 NOTE_TEXT = (
     "Note: GDP is quarter-over-quarter growth in inflation-adjusted output at a "
-    "seasonally adjusted annual rate (SAAR); CPI inflation is the 12-month change "
-    "in seasonally adjusted CPI. Red shading marks at least two consecutive "
+    "seasonally adjusted annual rate (SAAR); CPI inflation is the annualized "
+    "quarter-over-quarter change in seasonally adjusted CPI. Red shading marks at least two consecutive "
     "negative GDP quarters, a rule of thumb rather than official NBER dates. The "
     "10-year Treasury is a daily constant-maturity market yield. GDP is quarterly "
     "and revised; CPI is monthly and yields are daily. All series share a percent scale."
@@ -204,7 +204,8 @@ print(f"Downloading FRED series {INFLATION_SERIES_ID} ({INFLATION_SERIES_NAME}).
 cpi = fred.get_series(INFLATION_SERIES_ID).dropna().sort_index()
 cpi.index = pd.to_datetime(cpi.index)
 cpi = pd.to_numeric(cpi, errors="coerce").dropna()
-inflation = cpi.pct_change(periods=12).mul(100).dropna()
+cpi_quarterly = cpi.resample("QS-JAN").mean().dropna()
+inflation = cpi_quarterly.pct_change().add(1).pow(4).sub(1).mul(100).dropna()
 
 if inflation.empty:
     raise ValueError(f"FRED returned no usable observations for {INFLATION_SERIES_ID}.")
@@ -255,8 +256,8 @@ inflation_latest_value = float(inflation.iloc[-1])
 subtitle = (
     f"Real GDP grew at {latest_value:+.1f}% annualized in {quarter}, "
     f"{change_phrase} from {previous_value:+.1f}% in {previous_quarter}. "
-    f"CPI inflation was {inflation_latest_value:.1f}% year-over-year in "
-    f"{inflation_latest_date:%b %Y}; the 10-year Treasury yield was "
+    f"CPI inflation ran at {inflation_latest_value:.1f}% annualized in "
+    f"{inflation_latest_date.to_period('Q')}; the 10-year Treasury yield was "
     f"{yield_latest_value:.1f}% on {yield_latest_date:%d %b %Y}."
 )
 
@@ -357,7 +358,7 @@ ax.plot(
 ax.plot(
     inflation.index, inflation.to_numpy(dtype=float),
     color=GREEN, linewidth=2.2, solid_capstyle="round", solid_joinstyle="round", zorder=3,
-    label="CPI Inflation (12-month)",
+    label="CPI Inflation (annualized, quarterly)",
 )
 ax.set_axisbelow(True)
 ax.grid(
