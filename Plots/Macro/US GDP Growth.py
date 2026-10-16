@@ -81,7 +81,7 @@ TICK_SIZE = 13
 
 TITLE_BASELINE_PX = 83
 SUBTITLE_BASELINES_PX = (124, 155)
-SOURCE_BASELINE_PX = 981
+SOURCE_BASELINE_PX = 988
 NOTE_BASELINES_PX = (1013, 1037)
 
 # =============================================================================
