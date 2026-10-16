@@ -47,8 +47,8 @@ NOTE_LINE_SPACING = 0.016
 # YEAR = None -> Rolling 12 Months
 YEAR = None
 
-# True includes the current partial month.
-# False uses 12 completed months ending at the previous month-end.
+# True shows the latest 12 calendar months, including the current partial month.
+# False shows the prior 12 complete calendar months.
 INCLUDE_CURRENT_MONTH = True
 
 FONT_FAMILY = "Helvetica"
@@ -241,10 +241,7 @@ else:
 
         end_date = today
 
-        start_date = (
-            today.replace(day=1)
-            - pd.DateOffset(months=12)
-        )
+        start_date = today.to_period("M").start_time - pd.DateOffset(months=11)
 
     else:
 
@@ -253,10 +250,7 @@ else:
             - pd.Timedelta(days=1)
         )
 
-        start_date = (
-            end_date.to_period("M").start_time
-            - pd.DateOffset(months=12)
-        )
+        start_date = end_date.to_period("M").start_time - pd.DateOffset(months=11)
 
     chart_title = (
         "Global Commodity Returns Over Last 12 Months"
