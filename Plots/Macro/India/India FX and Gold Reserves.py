@@ -61,14 +61,14 @@ INK = "#000000"
 SUBTITLE_INK = "#2d2a2a"
 AXIS = "#7f7f7f"
 GRID = "#b9b9b9"
-FOOT = "#8c8c8c"
+FOOT = "#616970"
 FONT_STACK = (
     "Barclays Effra", "Barclays Effra App", "Inter", "Helvetica", "Arial",
     "Liberation Sans", "DejaVu Sans",
 )
 
 TITLE_SIZE = 26
-SUBTITLE_SIZE = 14
+SUBTITLE_SIZE = 13
 FOOT_SIZE = 10
 TICK_SIZE = 13
 
