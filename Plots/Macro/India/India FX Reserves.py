@@ -168,45 +168,65 @@ def reserve_share(component: str) -> float:
     return latest[component] / latest["total_reserves_usd_bn"] * 100
 
 
-latest_line = (
-    f"As of {latest_observation_date:%d %b %Y}, total reserves were "
-    f"US\\${latest['total_reserves_usd_bn']:,.0f}bn: FCA "
-    f"US\\${latest['fx_reserves_usd_bn']:,.0f}bn ({reserve_share('fx_reserves_usd_bn'):.1f}%), "
-    f"gold US\\${latest['gold_reserves_usd_bn']:,.0f}bn "
-    f"({reserve_share('gold_reserves_usd_bn'):.1f}%), SDRs "
-    f"US\\${latest['sdr_reserves_usd_bn']:,.0f}bn "
-    f"({reserve_share('sdr_reserves_usd_bn'):.1f}%), RTP "
-    f"US\\${latest['rtp_reserves_usd_bn']:,.0f}bn "
-    f"({reserve_share('rtp_reserves_usd_bn'):.1f}%)."
+def period_label(date: pd.Timestamp) -> str:
+    if COMPARISON_MODE == "yoy":
+        return str(date.year)
+    period = date.to_period("Q")
+    return f"Q{period.quarter} {period.year}"
+
+
+first = chart_data.iloc[0]
+first_period = chart_data.index[0]
+last_period = chart_data.index[-1]
+range_total_change = latest["total_reserves_usd_bn"] - first["total_reserves_usd_bn"]
+range_fca_change = latest["fx_reserves_usd_bn"] - first["fx_reserves_usd_bn"]
+range_gold_change = latest["gold_reserves_usd_bn"] - first["gold_reserves_usd_bn"]
+range_usd_inr_change_pct = (latest["usd_inr"] / first["usd_inr"] - 1) * 100
+range_reserve_verb = "rose" if range_total_change >= 0 else "fell"
+range_usd_inr_verb = "climbed" if range_usd_inr_change_pct >= 0 else "eased"
+
+
+def signed_usd_bn(value: float, decimals: int = 0) -> str:
+    sign = "+" if value >= 0 else "−"
+    return f"{sign}US\\${abs(value):,.{decimals}f}bn"
+
+
+range_line = (
+    f"From {period_label(first_period)} to {period_label(last_period)}, reserves "
+    f"{range_reserve_verb} US\\${abs(range_total_change):,.0f}bn to "
+    f"US\\${latest['total_reserves_usd_bn']:,.0f}bn (FCA "
+    f"{signed_usd_bn(range_fca_change)}, gold {signed_usd_bn(range_gold_change)}); "
+    f"USD/INR {range_usd_inr_verb} "
+    f"{abs(range_usd_inr_change_pct):.1f}%, signalling rupee weakness."
 )
+
 if len(chart_data) > 1:
     previous = chart_data.iloc[-2]
-    previous_date = chart_data.index[-2]
-    if COMPARISON_MODE == "yoy":
-        previous_period_label = str(previous_date.year)
-    else:
-        previous_quarter = previous_date.to_period("Q")
-        previous_period_label = f"Q{previous_quarter.quarter} {previous_quarter.year}"
     total_change = latest["total_reserves_usd_bn"] - previous["total_reserves_usd_bn"]
     fx_change = latest["fx_reserves_usd_bn"] - previous["fx_reserves_usd_bn"]
     gold_change = latest["gold_reserves_usd_bn"] - previous["gold_reserves_usd_bn"]
-    sdr_change = latest["sdr_reserves_usd_bn"] - previous["sdr_reserves_usd_bn"]
-    rtp_change = latest["rtp_reserves_usd_bn"] - previous["rtp_reserves_usd_bn"]
-    usd_inr_change_pct = (latest["usd_inr"] / previous["usd_inr"] - 1) * 100
-    total_change_label = f"{'+' if total_change >= 0 else '-'}US\\${abs(total_change):,.0f}bn"
-    fx_change_label = f"{'+' if fx_change >= 0 else '-'}US\\${abs(fx_change):,.1f}bn"
-    gold_change_label = f"{'+' if gold_change >= 0 else '-'}US\\${abs(gold_change):,.1f}bn"
-    sdr_change_label = f"{'+' if sdr_change >= 0 else '-'}US\\${abs(sdr_change):,.1f}bn"
-    rtp_change_label = f"{'+' if rtp_change >= 0 else '-'}US\\${abs(rtp_change):,.1f}bn"
-    change_line = (
-        f"{COMPARISON_NAME.capitalize()}: total {total_change_label} "
-        f"(FCA {fx_change_label}, gold {gold_change_label}, SDRs {sdr_change_label}, "
-        f"RTP {rtp_change_label}); USD/INR {latest['usd_inr']:.2f} "
-        f"({usd_inr_change_pct:+.1f}% vs {previous_period_label})."
+    latest_reserve_verb = "rose" if total_change >= 0 else "fell"
+    def signed_component_change(value: float) -> str:
+        return signed_usd_bn(value, decimals=1)
+
+    latest_line = (
+        f"In {period_label(last_period)}, reserves {latest_reserve_verb} "
+        f"US\\${abs(total_change):,.0f}bn {COMPARISON_NAME}, led by FCA "
+        f"({signed_component_change(fx_change)}) and gold "
+        f"({signed_component_change(gold_change)}). On {latest_observation_date:%d %b}, "
+        f"FCA made up {reserve_share('fx_reserves_usd_bn'):.1f}% of reserves, gold "
+        f"{reserve_share('gold_reserves_usd_bn'):.1f}%, SDRs "
+        f"{reserve_share('sdr_reserves_usd_bn'):.1f}% and RTP "
+        f"{reserve_share('rtp_reserves_usd_bn'):.1f}%."
     )
 else:
-    change_line = f"The {PERIOD_NAME} average USD/INR was {latest['usd_inr']:.2f}."
-subtitle_text = f"{change_line} {latest_line}"
+    latest_line = (
+        f"As of {latest_observation_date:%d %b %Y}, total reserves were "
+        f"US\\${latest['total_reserves_usd_bn']:,.0f}bn, with FCA at "
+        f"{reserve_share('fx_reserves_usd_bn'):.1f}% and gold at "
+        f"{reserve_share('gold_reserves_usd_bn'):.1f}%."
+    )
+subtitle_text = f"{range_line} {latest_line}"
 
 
 # =============================================================================
@@ -266,6 +286,8 @@ fig.text(
 subtitle_lines = wrap_to_margins(
     subtitle_text, SUBTITLE_SIZE, RIGHT_MARGIN_PX - LEFT_MARGIN_PX,
 )
+if len(subtitle_lines) > len(SUBTITLE_BASELINES_PX):
+    raise ValueError("The dynamic subtitle exceeds the two-line layout; shorten the commentary.")
 for line, baseline in zip(subtitle_lines, SUBTITLE_BASELINES_PX):
     fig.text(
         px_x(LEFT_MARGIN_PX), px_y(baseline), line,

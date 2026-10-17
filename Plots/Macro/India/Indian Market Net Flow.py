@@ -49,7 +49,7 @@ PERIOD_LABEL = {"mom": "month", "qoq": "quarter", "yoy": "year"}[COMPARISON_MODE
 SLIDE_TITLE = "India's FII and DII Net Market Flows"
 SOURCE_TEXT = (
     "Source: NSE FII/FPI & DII cash-market data (NSE, BSE and MSEI); "
-    "historical archive via Mr. Chartist; Nifty 500: Yahoo Finance (^CRSLDX)"
+    "Nifty 500: Yahoo Finance (^CRSLDX)"
 )
 NOTE_TEXT = (
     "Note: Net flow equals purchases minus sales in the cash market; bars show "
@@ -176,26 +176,146 @@ latest_session_count = int((
     flows.index.to_period(comparison_period)
     == latest_period.to_period(comparison_period)
 ).sum())
+nifty_period_close = nifty_close.resample(RESAMPLE_RULE).last().dropna()
+nifty_aligned = nifty_period_close.reindex(period_flows.index).dropna()
+nifty_latest = nifty_aligned.iloc[-1] if len(nifty_aligned) else None
+nifty_previous = nifty_aligned.iloc[-2] if len(nifty_aligned) > 1 else None
+nifty_first = nifty_aligned.iloc[0] if len(nifty_aligned) else None
+nifty_range_change_pct = (
+    (nifty_latest / nifty_first - 1) * 100
+    if nifty_latest is not None and nifty_first is not None and nifty_first != 0
+    else None
+)
 
 def flow_label(value: float, decimals: int = 0) -> str:
     sign = "+" if value >= 0 else "−"
     return f"{sign}₹{abs(value):,.{decimals}f}"
 
 
-if {"fii_buy", "fii_sell", "dii_buy", "dii_sell"}.issubset(period_flows.columns):
-    combined_net = latest["fii_net"] + latest["dii_net"]
-    current_line = (
-        f"{latest_period_label} (₹ crore; {latest_session_count} sessions): "
-        f"FII bought/sold {latest['fii_buy']:,.0f}/{latest['fii_sell']:,.0f} "
-        f"(net {flow_label(latest['fii_net'])}); DII bought/sold "
-        f"{latest['dii_buy']:,.0f}/{latest['dii_sell']:,.0f} "
-        f"(net {flow_label(latest['dii_net'])}); combined net {flow_label(combined_net)}."
+def flow_amount(value: float) -> str:
+    return f"₹{abs(value):,.0f}cr"
+
+
+def net_action(value: float) -> str:
+    if value > 0:
+        return f"bought {flow_amount(value)} net"
+    if value < 0:
+        return f"sold {flow_amount(value)} net"
+    return "were close to neutral"
+
+
+def flow_direction(value: float) -> str:
+    if value > 0:
+        return "net buying"
+    if value < 0:
+        return "net selling"
+    return "balanced flows"
+
+
+def flow_change_commentary(name: str, previous_value: float, latest_value: float) -> str:
+    delta = latest_value - previous_value
+    subject = "combined net" if name == "combined" else name
+    if delta == 0:
+        return f"{name.capitalize()} flows were unchanged"
+    if previous_value < 0 and latest_value < 0:
+        action = "selling deepened" if delta < 0 else "selling eased"
+    elif previous_value > 0 and latest_value > 0:
+        action = "buying strengthened" if delta > 0 else "buying eased"
+    elif previous_value <= 0 < latest_value:
+        return f"{name.capitalize()} flows swung to net buying of {flow_amount(latest_value)}"
+    elif previous_value >= 0 > latest_value:
+        return f"{name.capitalize()} flows turned to net selling of {flow_amount(latest_value)}"
+    elif latest_value == 0:
+        action = "moved back to balance"
+    else:
+        action = "moved further into net selling" if delta < 0 else "moved further into net buying"
+    return f"{subject} {action} by {flow_amount(delta)}"
+
+
+combined_net = latest["fii_net"] + latest["dii_net"]
+session_note = f" across {latest_session_count} sessions" if COMPARISON_MODE == "mom" else ""
+if latest["fii_net"] < 0 < latest["dii_net"]:
+    balance_comment = "DII buying more than offset foreign selling" if combined_net > 0 else "DII buying partly offset foreign selling"
+elif latest["dii_net"] < 0 < latest["fii_net"]:
+    balance_comment = "FII buying more than offset domestic selling" if combined_net > 0 else "FII buying partly offset domestic selling"
+elif latest["fii_net"] > 0 and latest["dii_net"] > 0:
+    balance_comment = "both investor groups were net buyers"
+elif latest["fii_net"] < 0 and latest["dii_net"] < 0:
+    balance_comment = "both investor groups were net sellers"
+elif combined_net > 0:
+    balance_comment = "overall flows leaned towards net buying"
+elif combined_net < 0:
+    balance_comment = "overall flows leaned towards net selling"
+else:
+    balance_comment = "the two groups' flows were close to balanced"
+fii_action = "bought" if latest["fii_net"] > 0 else "sold" if latest["fii_net"] < 0 else "were"
+dii_action = "bought" if latest["dii_net"] > 0 else "sold" if latest["dii_net"] < 0 else "were"
+combined_action = "net buying" if combined_net > 0 else "net selling" if combined_net < 0 else "balanced"
+range_fii_net = period_flows["fii_net"].sum()
+range_dii_net = period_flows["dii_net"].sum()
+range_combined_net = range_fii_net + range_dii_net
+range_start = period_flows.index[0]
+if COMPARISON_MODE == "mom":
+    range_label = f"{range_start:%b %Y}–{latest_period:%b %Y}"
+    range_start_short = range_start.strftime("%b %Y")
+elif COMPARISON_MODE == "qoq":
+    range_label = (
+        f"Q{range_start.to_period('Q').quarter} {range_start.year}–"
+        f"Q{latest_period.to_period('Q').quarter} {latest_period.year}"
+    )
+    range_start_short = f"Q{range_start.to_period('Q').quarter} {range_start.year}"
+else:
+    range_label = f"{range_start.year}–{latest_period.year}"
+    range_start_short = str(range_start.year)
+
+def investor_position(name: str, value: float) -> str:
+    if value > 0:
+        return f"{name} were net buyers of {flow_amount(value)}"
+    if value < 0:
+        return f"{name} were net sellers of {flow_amount(value)}"
+    return f"{name} were close to balance"
+
+
+combined_position = (
+    "net buying" if range_combined_net > 0
+    else "net selling" if range_combined_net < 0
+    else "balanced flows"
+)
+if range_fii_net < 0 < range_dii_net:
+    offset = "more than offsetting" if range_combined_net > 0 else "partly offsetting"
+    range_flow_read = (
+        f"FIIs sold {flow_amount(range_fii_net)} net; DIIs bought "
+        f"{flow_amount(range_dii_net)}, {offset} foreign outflows and leaving "
+        f"combined {combined_position} of {flow_amount(range_combined_net)}."
+    )
+elif range_dii_net < 0 < range_fii_net:
+    offset = "more than offsetting" if range_combined_net > 0 else "partly offsetting"
+    range_flow_read = (
+        f"FIIs bought {flow_amount(range_fii_net)} net; DIIs sold "
+        f"{flow_amount(range_dii_net)}, {offset} domestic buying and leaving "
+        f"combined {combined_position} of {flow_amount(range_combined_net)}."
     )
 else:
-    current_line = (
-        f"{latest_period_label}: FII net {flow_label(latest['fii_net'])}; "
-        f"DII net {flow_label(latest['dii_net'])}."
+    range_flow_read = (
+        f"{investor_position('FIIs', range_fii_net)} and "
+        f"{investor_position('DIIs', range_dii_net)}, leaving combined {combined_position} "
+        f"of {flow_amount(range_combined_net)}."
     )
+current_line = f"{range_label}: {range_flow_read}"
+if nifty_latest is not None and nifty_previous is not None and nifty_previous != 0:
+    nifty_change_pct = (nifty_latest / nifty_previous - 1) * 100
+    if abs(nifty_change_pct) < 0.05:
+        latest_market_summary = f"Nifty 500 was little changed in {latest_period_label} at {nifty_latest:,.0f}"
+    else:
+        market_verb = "rose" if nifty_change_pct > 0 else "fell"
+        latest_market_summary = (
+            f"Nifty 500 {market_verb} {abs(nifty_change_pct):.1f}% over the period "
+            f"to {nifty_latest:,.0f}"
+        )
+elif nifty_latest is not None:
+    latest_market_summary = f"Nifty 500 ended the period at {nifty_latest:,.0f}"
+else:
+    latest_market_summary = "Nifty 500 data are unavailable for this period"
 if len(period_flows) > 1:
     previous = period_flows.iloc[-2]
     previous_period = period_flows.index[-2]
@@ -205,21 +325,37 @@ if len(period_flows) > 1:
         previous_label = f"Q{previous_period.to_period('Q').quarter} {previous_period.year}"
     else:
         previous_label = str(previous_period.year)
-    fii_delta = latest["fii_net"] - previous["fii_net"]
-    dii_delta = latest["dii_net"] - previous["dii_net"]
     previous_combined = previous["fii_net"] + previous["dii_net"]
     latest_combined = latest["fii_net"] + latest["dii_net"]
-    combined_delta = latest_combined - previous_combined
-    comparison_short = {"mom": "MoM", "qoq": "QoQ", "yoy": "YoY"}[COMPARISON_MODE]
+    latest_fii_action = "selling" if latest["fii_net"] < 0 else "buying"
+    latest_dii_action = "buying" if latest["dii_net"] > 0 else "selling"
+    if latest["fii_net"] < 0 < latest["dii_net"]:
+        offset_phrase = "more than offset" if combined_net > 0 else "partly offset"
+        latest_flow_summary = (
+            f"{latest_period_label}: DII buying {flow_amount(latest['dii_net'])} "
+            f"{offset_phrase} FII selling {flow_amount(latest['fii_net'])}"
+        )
+    else:
+        latest_flow_summary = (
+            f"{latest_period_label}: FII {latest_fii_action} {flow_amount(latest['fii_net'])}; "
+            f"DII {latest_dii_action} {flow_amount(latest['dii_net'])}"
+        )
+    if nifty_range_change_pct is not None:
+        if abs(nifty_range_change_pct) < 0.05:
+            range_market_summary = f"the index is little changed since {range_start_short}"
+        else:
+            range_market_direction = "higher" if nifty_range_change_pct > 0 else "lower"
+            range_market_summary = (
+                f"the index is {abs(nifty_range_change_pct):.1f}% {range_market_direction} "
+                f"since {range_start_short}"
+            )
+    else:
+        range_market_summary = "the index's full-period performance is unavailable"
     change_line = (
-        f"{comparison_short}\u00a0vs\u00a0{previous_label}: FII {flow_label(previous['fii_net'])} "
-        f"to {flow_label(latest['fii_net'])} ({flow_label(fii_delta)}); DII "
-        f"{flow_label(previous['dii_net'])} to {flow_label(latest['dii_net'])} "
-        f"({flow_label(dii_delta)}); combined {flow_label(previous_combined)} to "
-        f"{flow_label(latest_combined)} ({flow_label(combined_delta)})."
+        f"{latest_flow_summary}; {latest_market_summary}, and {range_market_summary}."
     )
 else:
-    change_line = f"Showing the available {FREQUENCY} observation; no prior period is available for comparison."
+    change_line = latest_market_summary + "."
 
 
 # =============================================================================
@@ -292,10 +428,10 @@ def wrap_to_margins(text: str, font_size: float, max_width_px: float,
 
 fig.text(px_x(LEFT_MARGIN_PX), px_y(TITLE_BASELINE_PX), SLIDE_TITLE,
          fontsize=TITLE_SIZE, fontweight="bold", color=INK, ha="left", va="baseline")
-subtitle_text = f"{current_line} {change_line}"
 subtitle_lines = wrap_to_margins(
-    subtitle_text, SUBTITLE_SIZE, RIGHT_MARGIN_PX - LEFT_MARGIN_PX,
-    balance_two_lines=True,
+    f"{current_line} {change_line}",
+    SUBTITLE_SIZE,
+    RIGHT_MARGIN_PX - LEFT_MARGIN_PX,
 )
 if len(subtitle_lines) > len(SUBTITLE_BASELINES_PX):
     raise ValueError("The dynamic subtitle exceeds the two-line layout; shorten the selected date range or text.")
