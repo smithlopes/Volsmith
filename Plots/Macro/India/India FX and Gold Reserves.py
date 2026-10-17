@@ -329,7 +329,7 @@ fx_ax.plot(
     color=YELLOW,
     linewidth=2.8,
     marker="o",
-    markersize=4,
+    markersize=5,
     markerfacecolor="white",
     markeredgewidth=1.2,
     zorder=5,
