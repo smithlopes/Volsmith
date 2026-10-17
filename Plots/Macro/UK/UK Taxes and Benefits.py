@@ -37,7 +37,7 @@ MIGRATION_DATASET_PAGE = (
 
 # Set either value to a date such as "2016-01-01" to bound the chart.
 # None uses the earliest or latest available observation on that side.
-START_DATE = "2015-01-01"  # Example: "2021-01-01"
+START_DATE = "2021-01-01"  # Example: "2021-01-01"
 END_DATE = None  # Example: "2024-12-31"
 BAR_FREQUENCY = "quarterly"  # Choose "quarterly" or "yearly"
 
@@ -79,7 +79,7 @@ FONT_STACK = (
 
 TITLE_SIZE = 26
 SUBTITLE_SIZE = 14
-FOOT_SIZE = 8
+FOOT_SIZE = 10
 TICK_SIZE = 13
 
 TITLE_BASELINE_PX = 83
@@ -373,7 +373,7 @@ ax = fig.add_axes(
 )
 
 dates = mdates.date2num(plot_data.index.to_pydatetime())
-bar_width_days = 34 if BAR_FREQUENCY == "quarterly" else 180
+bar_width_days = 34 if BAR_FREQUENCY == "quarterly" else 182.5
 date_padding_days = 50 if BAR_FREQUENCY == "quarterly" else 200
 if BAR_FREQUENCY == "yearly":
     dates = mdates.date2num(
