@@ -1194,7 +1194,7 @@ fig.text(
     va="bottom",
     fontsize=16,
     style="italic",
-    color="#7d8597",
+    color="#616970",
     alpha=1,
 )
 
@@ -1212,7 +1212,7 @@ data_note = (
 
 data_note_font_size = 16
 
-data_note_color = "#7d8597"
+data_note_color = "#616970"
 
 data_note_alpha = 1
 

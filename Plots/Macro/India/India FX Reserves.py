@@ -21,7 +21,7 @@ RBI_RESERVES_CSV_URL = (
 FRED_USDINR_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DEXINUS"
 
 # Set either to a date like "2015-01-01"; None uses all available data.
-START_DATE = "2021-01-01"
+START_DATE = "2023-01-01"
 END_DATE = None
 COMPARISON_MODE = "qoq"  # Choose "yoy" or "qoq"; controls bar and subtitle frequency.
 
