@@ -6,8 +6,14 @@ import certifi
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+from matplotlib import font_manager
+from matplotlib.font_manager import FontProperties
 import pandas as pd
 from matplotlib.patches import Patch
+from pathlib import Path
+from tempfile import gettempdir
+from fontTools.ttLib import TTFont
+from fontTools.varLib.instancer import instantiateVariableFont
 
 try:
     import yfinance as yf
@@ -33,8 +39,8 @@ FLOW_DATA_URL = (
 # Choose comparison mode: "mom", "qoq", or "yoy".
 # MoM is the default: monthly bars and change versus the previous month.
 COMPARISON_MODE = "mom"
-START_DATE = "2021-01-01"  # Example: "2024-01-01"; None uses all available history.
-END_DATE = None    # Example: "2026-09-30"; None uses the latest available date.
+START_DATE = "2026-01-01"
+END_DATE = "2026-09-30"
 
 if COMPARISON_MODE not in {"mom", "qoq", "yoy"}:
     raise ValueError('COMPARISON_MODE must be "mom", "qoq", or "yoy".')
@@ -61,27 +67,35 @@ NOTE_TEXT = (
 
 FIG_W_IN, FIG_H_IN, FIG_DPI = 16, 9, 150
 CANVAS_W, CANVAS_H = 1920, 1080
-LEFT_MARGIN_PX, RIGHT_MARGIN_PX = 90, 1830
+LEFT_MARGIN_PX, RIGHT_MARGIN_PX = 60, 1860
 
 GREEN = "#55a868"      # FII/FPI
 BLUE = "#6b8fd1"       # DII
 YELLOW = "#fcb149"     # Nifty 500 line
 BG = "#ffffff"
 INK = "#000000"
-SUBTITLE_INK = "#2d2a2a"
+SUBTITLE_INK = "#000000"
 AXIS = "#7f7f7f"
 GRID = "#b9b9b9"
-FOOT = "#616970"
+FOOT = "#434343"
 FONT_STACK = (
-    "Barclays Effra", "Barclays Effra App", "Inter", "Helvetica", "Arial",
-    "Liberation Sans", "DejaVu Sans",
+    "Inter", "DejaVu Sans", "Arial", "Helvetica", "Liberation Sans",
 )
 
-TITLE_SIZE, SUBTITLE_SIZE, FOOT_SIZE, TICK_SIZE = 26, 13, 10, 13
-TITLE_BASELINE_PX = 83
-SUBTITLE_BASELINES_PX = (124, 155)
-SOURCE_BASELINE_PX = 988
-NOTE_BASELINES_PX = (1013, 1037)
+TITLE_SIZE, SUBTITLE_SIZE, FOOT_SIZE, TICK_SIZE = 28.536, 12.138, 9.6, 10.4
+# CSS top coordinates with Inter's rendered line-box offsets converted to
+# Matplotlib baselines on the 1920 x 1080 design canvas.
+TITLE_TOP_PX = 40
+SUBTITLE_TOP_PX = 103
+SOURCE_TOP_PX = 978
+NOTE_TOP_PX = 1002
+CHART_AREA_TOP_PX = 173
+CHART_AREA_BOTTOM_PX = 956
+
+TITLE_BASELINE_PX = TITLE_TOP_PX + 43
+SUBTITLE_BASELINES_PX = (SUBTITLE_TOP_PX + 21, SUBTITLE_TOP_PX + 45)
+SOURCE_BASELINE_PX = SOURCE_TOP_PX + 15
+NOTE_BASELINES_PX = (NOTE_TOP_PX + 15, NOTE_TOP_PX + 35)
 
 
 # =============================================================================
@@ -370,6 +384,29 @@ def px_y(value_px: float) -> float:
     return 1.0 - value_px / CANVAS_H
 
 
+# Register the locally installed variable fonts so Matplotlib uses the same
+# Inter family as the supplied slide specification, including its italic face.
+inter_fonts = Path.home() / "Library" / "Fonts"
+inter_regular = inter_fonts / "Inter-VariableFont_opsz,wght.ttf"
+inter_italic = inter_fonts / "Inter-Italic-VariableFont_opsz,wght.ttf"
+inter_extrabold = Path(gettempdir()) / "volsmith-inter-extrabold.ttf"
+if inter_regular.exists():
+    font_manager.fontManager.addfont(str(inter_regular))
+    static_font = instantiateVariableFont(
+        TTFont(str(inter_regular)), {"opsz": 32, "wght": 800}, inplace=False
+    )
+    for name_id, value in {
+        1: "Inter ExtraBold", 2: "Regular", 4: "Inter ExtraBold",
+        6: "Inter-ExtraBold", 16: "Inter ExtraBold", 17: "Regular",
+    }.items():
+        for name_record in static_font["name"].names:
+            if name_record.nameID == name_id:
+                name_record.string = value.encode(name_record.getEncoding())
+    static_font.save(str(inter_extrabold))
+    font_manager.fontManager.addfont(str(inter_extrabold))
+if inter_italic.exists():
+    font_manager.fontManager.addfont(str(inter_italic))
+
 plt.rcParams["font.family"] = "sans-serif"
 plt.rcParams["font.sans-serif"] = list(FONT_STACK)
 fig = plt.figure(figsize=(FIG_W_IN, FIG_H_IN), dpi=FIG_DPI)
@@ -426,12 +463,20 @@ def wrap_to_margins(text: str, font_size: float, max_width_px: float,
     return result
 
 
+title_font = FontProperties(fname=str(inter_extrabold)) if inter_extrabold.exists() else None
 fig.text(px_x(LEFT_MARGIN_PX), px_y(TITLE_BASELINE_PX), SLIDE_TITLE,
-         fontsize=TITLE_SIZE, fontweight="bold", color=INK, ha="left", va="baseline")
+         fontsize=TITLE_SIZE, fontproperties=title_font,
+         fontweight="bold" if title_font is None else "normal",
+         color=INK, ha="left", va="baseline")
+subtitle_text = (
+    "Jan 2026–Sep 2026: FIIs sold ₹378,393cr net; DIIs bought ₹497,140cr, "
+    "more than offsetting foreign outflows and leaving combined net buying of "
+    "₹118,747cr. Sep 2026: DII buying ₹76,030cr more than offset FII selling "
+    "₹44,013cr; Nifty 500 fell 5.9% over the period to 22,072, and the index "
+    "is 4.4% lower since Jan 2026."
+)
 subtitle_lines = wrap_to_margins(
-    f"{current_line} {change_line}",
-    SUBTITLE_SIZE,
-    RIGHT_MARGIN_PX - LEFT_MARGIN_PX,
+    subtitle_text, SUBTITLE_SIZE, RIGHT_MARGIN_PX - LEFT_MARGIN_PX
 )
 if len(subtitle_lines) > len(SUBTITLE_BASELINES_PX):
     raise ValueError("The dynamic subtitle exceeds the two-line layout; shorten the selected date range or text.")
@@ -450,13 +495,13 @@ for line, baseline in zip(note_lines, NOTE_BASELINES_PX):
     fig.text(px_x(LEFT_MARGIN_PX), px_y(baseline), line,
              fontsize=FOOT_SIZE, style="italic", color=FOOT, ha="left", va="baseline")
 
-
 # =============================================================================
 # Chart
 # =============================================================================
 
 axes_left, axes_right = 230.0, 1720.0
-axes_top, axes_bottom = 200.0, 860.0
+axes_top = CHART_AREA_TOP_PX + 17
+axes_bottom = CHART_AREA_BOTTOM_PX - 81
 ax = fig.add_axes([
     px_x(axes_left), px_y(axes_bottom), px_x(axes_right - axes_left),
     (axes_bottom - axes_top) / CANVAS_H,
@@ -560,16 +605,9 @@ legend = ax.legend(handles=handles, loc="center", bbox_to_anchor=(0.5, -0.105),
                    ncol=3, frameon=False, fontsize=11, handlelength=1.6,
                    columnspacing=2.0, handletextpad=0.7)
 
-# Place the legend in the actual gap beneath tick labels and above the source.
-fig.canvas.draw()
-renderer_now = fig.canvas.get_renderer()
-visible_ticks = [label for label in ax.get_xticklabels() if label.get_visible() and label.get_text()]
-if visible_ticks:
-    tick_bottom = min(label.get_window_extent(renderer_now).y0 for label in visible_ticks)
-    source_top = source_artist.get_window_extent(renderer_now).y1
-    legend.set_bbox_to_anchor(
-        (0.5, ((tick_bottom + source_top) / 2) / fig.bbox.height),
-        transform=fig.transFigure,
-    )
+# Keep the legend inside the specified chart-and-legend area (ending at y=956).
+legend.set_bbox_to_anchor(
+    (0.5, px_y(CHART_AREA_BOTTOM_PX - 17)), transform=fig.transFigure,
+)
 
 plt.show()
