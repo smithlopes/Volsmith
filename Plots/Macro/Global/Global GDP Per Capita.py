@@ -8,7 +8,13 @@ import certifi
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+from matplotlib import font_manager
+from matplotlib.font_manager import FontProperties
 import pandas as pd
+from pathlib import Path
+from tempfile import gettempdir
+from fontTools.ttLib import TTFont
+from fontTools.varLib.instancer import instantiateVariableFont
 
 
 # =============================================================================
@@ -48,7 +54,7 @@ NOTE_TEXT = (
 
 FIG_W_IN, FIG_H_IN, FIG_DPI = 16, 9, 150
 CANVAS_W, CANVAS_H = 1920, 1080
-LEFT_MARGIN_PX, RIGHT_MARGIN_PX = 90, 1830
+LEFT_MARGIN_PX, RIGHT_MARGIN_PX = 60, 1860
 
 COLORS = {
     "United States": "#6b8fd1",
@@ -60,18 +66,20 @@ COLORS = {
     "Singapore": "#fcb149",
 }
 BG, INK = "#ffffff", "#000000"
-SUBTITLE_INK, AXIS = "#2d2a2a", "#7f7f7f"
-GRID, FOOT = "#b9b9b9", "#8c8c8c"
+SUBTITLE_INK, AXIS = "#000000", "#7f7f7f"
+GRID, FOOT = "#b9b9b9", "#434343"
 FONT_STACK = (
-    "Barclays Effra", "Barclays Effra App", "Inter", "Helvetica", "Arial",
-    "Liberation Sans", "DejaVu Sans",
+    "Inter", "DejaVu Sans", "Arial", "Helvetica", "Liberation Sans",
 )
 
-TITLE_SIZE, SUBTITLE_SIZE, FOOT_SIZE, TICK_SIZE = 26, 14, 10, 13
-TITLE_BASELINE_PX = 83
-SUBTITLE_BASELINES_PX = (124, 155)
-SOURCE_BASELINE_PX = 988
-NOTE_BASELINES_PX = (1013, 1037)
+TITLE_SIZE, SUBTITLE_SIZE, FOOT_SIZE, TICK_SIZE = 28.536, 12.138, 9.6, 10.4
+TITLE_TOP_PX, SUBTITLE_TOP_PX = 40, 103
+SOURCE_TOP_PX, NOTE_TOP_PX = 978, 1002
+CHART_AREA_TOP_PX, CHART_AREA_BOTTOM_PX = 173, 956
+TITLE_BASELINE_PX = TITLE_TOP_PX + 43
+SUBTITLE_BASELINES_PX = (SUBTITLE_TOP_PX + 21, SUBTITLE_TOP_PX + 45)
+SOURCE_BASELINE_PX = SOURCE_TOP_PX + 15
+NOTE_BASELINES_PX = (NOTE_TOP_PX + 15, NOTE_TOP_PX + 35)
 
 
 # =============================================================================
@@ -165,6 +173,27 @@ def px_y(value_px: float) -> float:
     return 1.0 - value_px / CANVAS_H
 
 
+inter_fonts = Path.home() / "Library" / "Fonts"
+inter_regular = inter_fonts / "Inter-VariableFont_opsz,wght.ttf"
+inter_italic = inter_fonts / "Inter-Italic-VariableFont_opsz,wght.ttf"
+inter_extrabold = Path(gettempdir()) / "volsmith-inter-extrabold.ttf"
+if inter_regular.exists():
+    font_manager.fontManager.addfont(str(inter_regular))
+    static_font = instantiateVariableFont(
+        TTFont(str(inter_regular)), {"opsz": 32, "wght": 800}, inplace=False
+    )
+    for name_id, value in {
+        1: "Inter ExtraBold", 2: "Regular", 4: "Inter ExtraBold",
+        6: "Inter-ExtraBold", 16: "Inter ExtraBold", 17: "Regular",
+    }.items():
+        for name_record in static_font["name"].names:
+            if name_record.nameID == name_id:
+                name_record.string = value.encode(name_record.getEncoding())
+    static_font.save(str(inter_extrabold))
+    font_manager.fontManager.addfont(str(inter_extrabold))
+if inter_italic.exists():
+    font_manager.fontManager.addfont(str(inter_italic))
+
 plt.rcParams["font.family"] = "sans-serif"
 plt.rcParams["font.sans-serif"] = list(FONT_STACK)
 fig = plt.figure(figsize=(FIG_W_IN, FIG_H_IN), dpi=FIG_DPI)
@@ -223,9 +252,12 @@ def wrap_to_margins(
     return lines
 
 
+title_font = FontProperties(fname=str(inter_extrabold)) if inter_extrabold.exists() else None
 fig.text(
     px_x(LEFT_MARGIN_PX), px_y(TITLE_BASELINE_PX), SLIDE_TITLE,
-    fontsize=TITLE_SIZE, fontweight="bold", color=INK, ha="left", va="baseline",
+    fontsize=TITLE_SIZE, fontproperties=title_font,
+    fontweight="bold" if title_font is None else "normal",
+    color=INK, ha="left", va="baseline",
 )
 subtitle_lines = wrap_to_margins(
     subtitle,
@@ -260,7 +292,8 @@ for line, baseline in zip(note_lines, NOTE_BASELINES_PX):
 # =============================================================================
 
 axes_left, axes_right = 205.0, 1798.0
-axes_top, axes_bottom = 200.0, 835.0
+axes_top = CHART_AREA_TOP_PX + 17
+axes_bottom = CHART_AREA_BOTTOM_PX - 81
 ax = fig.add_axes(
     [
         px_x(axes_left), px_y(axes_bottom), px_x(axes_right - axes_left),
@@ -314,16 +347,11 @@ ax.set_xlim(pd.Timestamp(f"{start_year}-01-01") - pd.Timedelta(days=120),
             pd.Timestamp(f"{end_year + 1}-01-01") + pd.Timedelta(days=30))
 
 legend = ax.legend(
-    loc="center", bbox_to_anchor=(0.5, -0.105), ncol=7, frameon=False,
+    loc="center", ncol=7, frameon=False,
     fontsize=11, handlelength=1.8, columnspacing=1.8, handletextpad=0.7,
 )
-fig.canvas.draw()
-visible_ticks = [label for label in ax.get_xticklabels() if label.get_visible() and label.get_text()]
-if visible_ticks:
-    tick_bottom = min(label.get_window_extent(get_renderer()).y0 for label in visible_ticks)
-    legend.set_bbox_to_anchor(
-        (0.5, (tick_bottom + fig.bbox.height * px_y(SOURCE_BASELINE_PX)) / 2 / fig.bbox.height),
-        transform=fig.transFigure,
-    )
+legend.set_bbox_to_anchor(
+    (0.5, px_y(CHART_AREA_BOTTOM_PX - 17)), transform=fig.transFigure,
+)
 
 plt.show()

@@ -8,8 +8,14 @@ import certifi
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+from matplotlib import font_manager
+from matplotlib.font_manager import FontProperties
 import pandas as pd
 from matplotlib.patches import FancyBboxPatch
+from pathlib import Path
+from tempfile import gettempdir
+from fontTools.ttLib import TTFont
+from fontTools.varLib.instancer import instantiateVariableFont
 
 
 # =============================================================================
@@ -43,33 +49,35 @@ FIG_DPI = 150
 CANVAS_W = 1920
 CANVAS_H = 1080
 
-LEFT_MARGIN_PX = 90
-RIGHT_MARGIN_PX = 1830
+LEFT_MARGIN_PX = 60
+RIGHT_MARGIN_PX = 1860
 
 BLUE = "#6b8fd1"
 ORANGE = "#e8856a"
 GREEN = "#55a868"
 BG = "#ffffff"
 INK = "#000000"
-SUBTITLE_INK = "#2d2a2a"
+SUBTITLE_INK = "#000000"
 AXIS = "#7f7f7f"
 GRID = "#b9b9b9"
-FOOT = "#8c8c8c"
+FOOT = "#434343"
 COLORS = {"United Kingdom": BLUE, "United States": ORANGE, "Germany": GREEN}
 FONT_STACK = (
-    "Barclays Effra", "Barclays Effra App", "Inter", "Helvetica", "Arial",
-    "Liberation Sans", "DejaVu Sans",
+    "Inter", "DejaVu Sans", "Arial", "Helvetica", "Liberation Sans",
 )
 
-TITLE_SIZE = 26
-SUBTITLE_SIZE = 14
-FOOT_SIZE = 11
-TICK_SIZE = 13
+TITLE_SIZE = 28.536
+SUBTITLE_SIZE = 12.138
+FOOT_SIZE = 9.6
+TICK_SIZE = 10.4
 
-TITLE_BASELINE_PX = 83
-SUBTITLE_BASELINES_PX = (124, 155)
-SOURCE_BASELINE_PX = 988
-NOTE_BASELINES_PX = (1013, 1037)
+TITLE_TOP_PX, SUBTITLE_TOP_PX = 40, 103
+SOURCE_TOP_PX, NOTE_TOP_PX = 978, 1002
+CHART_AREA_TOP_PX, CHART_AREA_BOTTOM_PX = 173, 956
+TITLE_BASELINE_PX = TITLE_TOP_PX + 43
+SUBTITLE_BASELINES_PX = (SUBTITLE_TOP_PX + 21, SUBTITLE_TOP_PX + 45)
+SOURCE_BASELINE_PX = SOURCE_TOP_PX + 15
+NOTE_BASELINES_PX = (NOTE_TOP_PX + 15, NOTE_TOP_PX + 35)
 
 
 # =============================================================================
@@ -158,6 +166,27 @@ def px_y(value_px: float) -> float:
     return 1.0 - value_px / CANVAS_H
 
 
+inter_fonts = Path.home() / "Library" / "Fonts"
+inter_regular = inter_fonts / "Inter-VariableFont_opsz,wght.ttf"
+inter_italic = inter_fonts / "Inter-Italic-VariableFont_opsz,wght.ttf"
+inter_extrabold = Path(gettempdir()) / "volsmith-inter-extrabold.ttf"
+if inter_regular.exists():
+    font_manager.fontManager.addfont(str(inter_regular))
+    static_font = instantiateVariableFont(
+        TTFont(str(inter_regular)), {"opsz": 32, "wght": 800}, inplace=False
+    )
+    for name_id, value in {
+        1: "Inter ExtraBold", 2: "Regular", 4: "Inter ExtraBold",
+        6: "Inter-ExtraBold", 16: "Inter ExtraBold", 17: "Regular",
+    }.items():
+        for name_record in static_font["name"].names:
+            if name_record.nameID == name_id:
+                name_record.string = value.encode(name_record.getEncoding())
+    static_font.save(str(inter_extrabold))
+    font_manager.fontManager.addfont(str(inter_extrabold))
+if inter_italic.exists():
+    font_manager.fontManager.addfont(str(inter_italic))
+
 plt.rcParams["font.family"] = "sans-serif"
 plt.rcParams["font.sans-serif"] = list(FONT_STACK)
 
@@ -201,9 +230,12 @@ def wrap_to_margins(
 # Title, subtitle, source, and note
 # =============================================================================
 
+title_font = FontProperties(fname=str(inter_extrabold)) if inter_extrabold.exists() else None
 fig.text(
     px_x(LEFT_MARGIN_PX), px_y(TITLE_BASELINE_PX), SLIDE_TITLE,
-    fontsize=TITLE_SIZE, fontweight="bold", color=INK, ha="left", va="baseline",
+    fontsize=TITLE_SIZE, fontproperties=title_font,
+    fontweight="bold" if title_font is None else "normal",
+    color=INK, ha="left", va="baseline",
 )
 
 wrapped_subtitle = wrap_to_margins(
@@ -235,7 +267,8 @@ for line, baseline in zip(wrapped_note, NOTE_BASELINES_PX):
 # =============================================================================
 
 axes_left, axes_right = 205.0, 1798.0
-axes_top, axes_bottom = 200.0, 835.0
+axes_top = CHART_AREA_TOP_PX + 17
+axes_bottom = CHART_AREA_BOTTOM_PX - 81
 ax = fig.add_axes(
     [
         px_x(axes_left), px_y(axes_bottom), px_x(axes_right - axes_left),
@@ -410,7 +443,7 @@ card.set_xlim(0, 1)
 card.set_ylim(0, 1)
 card.text(
     0.07, 0.86, f"Latest GDP growth vs year ago · {latest_period_label}",
-    ha="left", va="center", fontsize=8, color="#777777", fontweight="medium",
+    ha="left", va="center", fontsize=8, color="#777777",
 )
 for row, country in enumerate(COUNTRY_ORDER):
     y = 0.63 - row * 0.21
@@ -421,12 +454,15 @@ for row, country in enumerate(COUNTRY_ORDER):
     card.text(label_x, y, country, ha="left", va="center", fontsize=9, color=INK)
     card.text(
         value_x, y, f"{latest_values[country]:+.1f}%", ha="right", va="center",
-        fontsize=9, color=INK, fontweight="bold",
+        fontsize=9, color=INK,
     )
 
-ax.legend(
-    loc="upper center", bbox_to_anchor=(0.5, -0.105), ncol=3, frameon=False,
+legend = ax.legend(
+    loc="center", ncol=3, frameon=False,
     fontsize=11, handlelength=2.2, columnspacing=1.8, handletextpad=0.7,
+)
+legend.set_bbox_to_anchor(
+    (0.5, px_y(CHART_AREA_BOTTOM_PX - 17)), transform=fig.transFigure,
 )
 
 plt.show()

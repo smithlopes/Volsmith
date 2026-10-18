@@ -13,9 +13,14 @@ import certifi
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+from matplotlib import font_manager
+from matplotlib.font_manager import FontProperties
 import pandas as pd
 from fredapi import Fred
 from matplotlib.patches import Patch
+from tempfile import gettempdir
+from fontTools.ttLib import TTFont
+from fontTools.varLib.instancer import instantiateVariableFont
 
 
 # =============================================================================
@@ -53,37 +58,44 @@ FIG_DPI = 150
 CANVAS_W = 1920
 CANVAS_H = 1080
 
-LEFT_MARGIN_PX = 90
-RIGHT_MARGIN_PX = 1830
+LEFT_MARGIN_PX = 60
+RIGHT_MARGIN_PX = 1860
 
 BLUE = "#6b8fd1"
 ORANGE = "#e8856a"
 GREEN = "#55a868"
 BG = "#ffffff"
 INK = "#000000"
-SUBTITLE_INK = "#2d2a2a"
+SUBTITLE_INK = "#000000"
 AXIS = "#7f7f7f"
 GRID = "#b9b9b9"
-FOOT = "#8c8c8c"
+FOOT = "#434343"
 FONT_STACK = (
-    "Barclays Effra",
-    "Barclays Effra App",
     "Inter",
-    "Helvetica",
-    "Arial",
-    "Liberation Sans",
     "DejaVu Sans",
+    "Arial",
+    "Helvetica",
+    "Liberation Sans",
 )
 
-TITLE_SIZE = 26
-SUBTITLE_SIZE = 14
-FOOT_SIZE = 10
-TICK_SIZE = 13
+TITLE_SIZE = 28.536
+SUBTITLE_SIZE = 12.138
+FOOT_SIZE = 9.6
+TICK_SIZE = 10.4
 
-TITLE_BASELINE_PX = 83
-SUBTITLE_BASELINES_PX = (124, 155)
-SOURCE_BASELINE_PX = 988
-NOTE_BASELINES_PX = (1013, 1037)
+# CSS top coordinates with Inter's rendered line-box offsets converted to
+# Matplotlib baselines on the 1920 x 1080 design canvas.
+TITLE_TOP_PX = 40
+SUBTITLE_TOP_PX = 103
+SOURCE_TOP_PX = 978
+NOTE_TOP_PX = 1002
+CHART_AREA_TOP_PX = 173
+CHART_AREA_BOTTOM_PX = 956
+
+TITLE_BASELINE_PX = TITLE_TOP_PX + 43
+SUBTITLE_BASELINES_PX = (SUBTITLE_TOP_PX + 21, SUBTITLE_TOP_PX + 45)
+SOURCE_BASELINE_PX = SOURCE_TOP_PX + 15
+NOTE_BASELINES_PX = (NOTE_TOP_PX + 15, NOTE_TOP_PX + 35)
 
 # =============================================================================
 # FRED SSL and API setup
@@ -110,6 +122,27 @@ def px_x(value_px: float) -> float:
 def px_y(value_px: float) -> float:
     return 1.0 - value_px / CANVAS_H
 
+
+inter_fonts = Path.home() / "Library" / "Fonts"
+inter_regular = inter_fonts / "Inter-VariableFont_opsz,wght.ttf"
+inter_italic = inter_fonts / "Inter-Italic-VariableFont_opsz,wght.ttf"
+inter_extrabold = Path(gettempdir()) / "volsmith-inter-extrabold.ttf"
+if inter_regular.exists():
+    font_manager.fontManager.addfont(str(inter_regular))
+    static_font = instantiateVariableFont(
+        TTFont(str(inter_regular)), {"opsz": 32, "wght": 800}, inplace=False
+    )
+    for name_id, value in {
+        1: "Inter ExtraBold", 2: "Regular", 4: "Inter ExtraBold",
+        6: "Inter-ExtraBold", 16: "Inter ExtraBold", 17: "Regular",
+    }.items():
+        for name_record in static_font["name"].names:
+            if name_record.nameID == name_id:
+                name_record.string = value.encode(name_record.getEncoding())
+    static_font.save(str(inter_extrabold))
+    font_manager.fontManager.addfont(str(inter_extrabold))
+if inter_italic.exists():
+    font_manager.fontManager.addfont(str(inter_italic))
 
 plt.rcParams["font.family"] = "sans-serif"
 plt.rcParams["font.sans-serif"] = list(FONT_STACK)
@@ -268,9 +301,12 @@ print(f"CPI inflation latest: {inflation_latest_date:%Y-%m-%d} ({inflation_lates
 # Title and subtitle
 # =============================================================================
 
+title_font = FontProperties(fname=str(inter_extrabold)) if inter_extrabold.exists() else None
 fig.text(
     px_x(LEFT_MARGIN_PX), px_y(TITLE_BASELINE_PX), SLIDE_TITLE,
-    fontsize=TITLE_SIZE, fontweight="bold", color=INK, ha="left", va="baseline",
+    fontsize=TITLE_SIZE, fontproperties=title_font,
+    fontweight="bold" if title_font is None else "normal",
+    color=INK, ha="left", va="baseline",
 )
 
 wrapped_subtitle = wrap_to_margins(
@@ -307,7 +343,8 @@ for line, baseline in zip(wrapped_note, NOTE_BASELINES_PX):
 # =============================================================================
 
 axes_left, axes_right = 205.0, 1798.0
-axes_top, axes_bottom = 200.0, 835.0
+axes_top = CHART_AREA_TOP_PX + 17
+axes_bottom = CHART_AREA_BOTTOM_PX - 81
 ax = fig.add_axes(
     [
         px_x(axes_left),
@@ -374,7 +411,7 @@ ax.tick_params(
 ax.set_ylabel("Percent", fontsize=TICK_SIZE, color=INK, labelpad=10)
 ax.set_xlim(start_date, display_end_date)
 ax.yaxis.set_label_coords(-0.060, 0.5)
-ax.legend(
+legend = ax.legend(
     handles=[
         *ax.get_legend_handles_labels()[0],
         Patch(facecolor="#d9534f", alpha=0.10, edgecolor="none", label="2+ negative GDP quarters"),
@@ -383,14 +420,16 @@ ax.legend(
         *ax.get_legend_handles_labels()[1],
         "2+ negative GDP quarters",
     ],
-    loc="upper center",
-    bbox_to_anchor=(0.5, -0.105),
+    loc="center",
     ncol=4,
     frameon=False,
     fontsize=11,
     handlelength=2.2,
     columnspacing=1.8,
     handletextpad=0.7,
+)
+legend.set_bbox_to_anchor(
+    (0.5, px_y(CHART_AREA_BOTTOM_PX - 17)), transform=fig.transFigure,
 )
 
 

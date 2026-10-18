@@ -6,8 +6,14 @@ import certifi
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+from matplotlib import font_manager
+from matplotlib.font_manager import FontProperties
 import pandas as pd
 from matplotlib.patches import Patch
+from pathlib import Path
+from tempfile import gettempdir
+from fontTools.ttLib import TTFont
+from fontTools.varLib.instancer import instantiateVariableFont
 
 
 # =============================================================================
@@ -23,7 +29,7 @@ FRED_USDINR_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DEXINU
 # Set either to a date like "2015-01-01"; None uses all available data.
 START_DATE = "2023-01-01"
 END_DATE = None
-COMPARISON_MODE = "qoq"  # Choose "yoy" or "qoq"; controls bar and subtitle frequency.
+COMPARISON_MODE = "qoq"  # Choose "yoy" or "qoq"; # controls bar and subtitle frequency.
 
 if COMPARISON_MODE not in {"yoy", "qoq"}:
     raise ValueError('COMPARISON_MODE must be either "yoy" or "qoq".')
@@ -48,8 +54,8 @@ FIG_DPI = 150
 CANVAS_W = 1920
 CANVAS_H = 1080
 
-LEFT_MARGIN_PX = 90
-RIGHT_MARGIN_PX = 1830
+LEFT_MARGIN_PX = 60
+RIGHT_MARGIN_PX = 1860
 
 BLUE = "#6b8fd1"
 ORANGE = "#e8856a"
@@ -58,24 +64,32 @@ GREEN = "#55a868"
 PURPLE = "#9b8ac4"
 BG = "#ffffff"
 INK = "#000000"
-SUBTITLE_INK = "#2d2a2a"
+SUBTITLE_INK = "#000000"
 AXIS = "#7f7f7f"
 GRID = "#b9b9b9"
-FOOT = "#616970"
+FOOT = "#434343"
 FONT_STACK = (
-    "Barclays Effra", "Barclays Effra App", "Inter", "Helvetica", "Arial",
-    "Liberation Sans", "DejaVu Sans",
+    "Inter", "DejaVu Sans", "Arial", "Helvetica", "Liberation Sans",
 )
 
-TITLE_SIZE = 26
-SUBTITLE_SIZE = 13
-FOOT_SIZE = 10
-TICK_SIZE = 13
+TITLE_SIZE = 28.536
+SUBTITLE_SIZE = 12.138
+FOOT_SIZE = 9.6
+TICK_SIZE = 10.4
 
-TITLE_BASELINE_PX = 83
-SUBTITLE_BASELINES_PX = (124, 155)
-SOURCE_BASELINE_PX = 988
-NOTE_BASELINES_PX = (1013, 1037)
+# CSS top coordinates with Inter's rendered line-box offsets converted to
+# Matplotlib baselines on the 1920 x 1080 design canvas.
+TITLE_TOP_PX = 40
+SUBTITLE_TOP_PX = 103
+SOURCE_TOP_PX = 978
+NOTE_TOP_PX = 1002
+CHART_AREA_TOP_PX = 173
+CHART_AREA_BOTTOM_PX = 956
+
+TITLE_BASELINE_PX = TITLE_TOP_PX + 43
+SUBTITLE_BASELINES_PX = (SUBTITLE_TOP_PX + 21, SUBTITLE_TOP_PX + 45)
+SOURCE_BASELINE_PX = SOURCE_TOP_PX + 15
+NOTE_BASELINES_PX = (NOTE_TOP_PX + 15, NOTE_TOP_PX + 35)
 
 
 # =============================================================================
@@ -241,6 +255,27 @@ def px_y(value_px: float) -> float:
     return 1.0 - value_px / CANVAS_H
 
 
+inter_fonts = Path.home() / "Library" / "Fonts"
+inter_regular = inter_fonts / "Inter-VariableFont_opsz,wght.ttf"
+inter_italic = inter_fonts / "Inter-Italic-VariableFont_opsz,wght.ttf"
+inter_extrabold = Path(gettempdir()) / "volsmith-inter-extrabold.ttf"
+if inter_regular.exists():
+    font_manager.fontManager.addfont(str(inter_regular))
+    static_font = instantiateVariableFont(
+        TTFont(str(inter_regular)), {"opsz": 32, "wght": 800}, inplace=False
+    )
+    for name_id, value in {
+        1: "Inter ExtraBold", 2: "Regular", 4: "Inter ExtraBold",
+        6: "Inter-ExtraBold", 16: "Inter ExtraBold", 17: "Regular",
+    }.items():
+        for name_record in static_font["name"].names:
+            if name_record.nameID == name_id:
+                name_record.string = value.encode(name_record.getEncoding())
+    static_font.save(str(inter_extrabold))
+    font_manager.fontManager.addfont(str(inter_extrabold))
+if inter_italic.exists():
+    font_manager.fontManager.addfont(str(inter_italic))
+
 plt.rcParams["font.family"] = "sans-serif"
 plt.rcParams["font.sans-serif"] = list(FONT_STACK)
 
@@ -279,9 +314,12 @@ def wrap_to_margins(
     return lines
 
 
+title_font = FontProperties(fname=str(inter_extrabold)) if inter_extrabold.exists() else None
 fig.text(
     px_x(LEFT_MARGIN_PX), px_y(TITLE_BASELINE_PX), SLIDE_TITLE,
-    fontsize=TITLE_SIZE, fontweight="bold", color=INK, ha="left", va="baseline",
+    fontsize=TITLE_SIZE, fontproperties=title_font,
+    fontweight="bold" if title_font is None else "normal",
+    color=INK, ha="left", va="baseline",
 )
 subtitle_lines = wrap_to_margins(
     subtitle_text, SUBTITLE_SIZE, RIGHT_MARGIN_PX - LEFT_MARGIN_PX,
@@ -312,7 +350,8 @@ for line, baseline in zip(
 # =============================================================================
 
 axes_left, axes_right = 230.0, 1720.0
-axes_top, axes_bottom = 200.0, 860.0
+axes_top = CHART_AREA_TOP_PX + 17
+axes_bottom = CHART_AREA_BOTTOM_PX - 81
 ax = fig.add_axes(
     [
         px_x(axes_left), px_y(axes_bottom), px_x(axes_right - axes_left),
@@ -433,7 +472,6 @@ handles = [
 legend = ax.legend(
     handles=handles,
     loc="center",
-    bbox_to_anchor=(0.5, -0.105),
     ncol=5,
     frameon=False,
     fontsize=11,
@@ -442,21 +480,9 @@ legend = ax.legend(
     handletextpad=0.7,
 )
 
-# Center the legend in the available space between x tick labels and source.
-fig.canvas.draw()
-renderer = fig.canvas.get_renderer()
-visible_x_ticks = [
-    label for label in ax.get_xticklabels()
-    if label.get_visible() and label.get_text()
-]
-if visible_x_ticks:
-    tick_label_bottom = min(
-        label.get_window_extent(renderer).y0 for label in visible_x_ticks
-    )
-    source_line_top = source_artist.get_window_extent(renderer).y1
-    legend_center_y = (tick_label_bottom + source_line_top) / 2
-    legend.set_bbox_to_anchor(
-        (0.5, legend_center_y / fig.bbox.height), transform=fig.transFigure,
-    )
+# Keep the legend inside the specified chart-and-legend area (ending at y=956).
+legend.set_bbox_to_anchor(
+    (0.5, px_y(CHART_AREA_BOTTOM_PX - 17)), transform=fig.transFigure,
+)
 
 plt.show()

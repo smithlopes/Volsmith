@@ -601,7 +601,7 @@ handles = [
         markerfacecolor="white", label="Nifty 500 (monthly close)",
     ),
 ]
-legend = ax.legend(handles=handles, loc="center", bbox_to_anchor=(0.5, -0.105),
+legend = ax.legend(handles=handles, loc="center",
                    ncol=3, frameon=False, fontsize=11, handlelength=1.6,
                    columnspacing=2.0, handletextpad=0.7)
 
