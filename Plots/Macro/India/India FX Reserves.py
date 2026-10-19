@@ -67,7 +67,7 @@ INK = "#000000"
 SUBTITLE_INK = "#000000"
 AXIS = "#7f7f7f"
 GRID = "#b9b9b9"
-FOOT = "#434343"
+FOOT = "#8c8c8c"
 FONT_STACK = (
     "Inter", "DejaVu Sans", "Arial", "Helvetica", "Liberation Sans",
 )

@@ -1,9 +1,9 @@
 <div class="main">
-    <p class="title">India's FII and DII Net Market Flows</p>
-    <p class="subtitle">Jan 2026–Sep 2026: FIIs sold ₹378,393cr net; DIIs bought ₹497,140cr, more than offsetting foreign outflows and leaving combined net buying of ₹118,747cr. Sep 2026: DII buying ₹76,030cr more than offset FII selling ₹44,013cr; Nifty 500 fell 5.9% over the period to 22,072, and the index is 4.4% lower since Jan 2026.</p>
-    <p class="note">Note: Net flow equals purchases minus sales in the cash market; bars show the sum for each month. Values are in ₹ crore (cr). The Nifty 500 line shows monthly closing levels in index points. Positive values indicate net buying and negative values indicate net selling. The latest period may be partial.</p>
-    <p class="source">Source: NSE FII/FPI &amp; DII cash-market data (NSE, BSE and MSEI); Nifty 500: Yahoo Finance (^CRSLDX) </p>
-    <div class="actual-chart-plot-area"></div>
+    <p class="title">India's Foreign Exchange Reserves Composition</p>
+    <p class="subtitle">From Q1 2023 to Q3 2026, reserves rose US$XXXbn to US$XXXbn (FCA +US$XXXbn, gold +US$XXXbn); USD/INR climbed X.X%, signalling rupee weakness. In Q3 2026, reserves rose US$XXbn quarter-on-quarter, led by FCA (+US$XX.Xbn) and gold (+US$XX.Xbn). On DD Mon, FCA made up XX.X% of reserves, gold XX.X%, SDRs X.X% and RTP X.X%.</p>
+    <p class="note">Note: Stacked bars show foreign currency assets, gold, SDRs and India's reserve tranche position in the IMF (RTP), in US$ billions. Quarterly bars use each period's final available weekly observation (the latest period may be partial); USD/INR is the quarterly average. A higher USD/INR rate means a weaker rupee.</p>
+    <p class="source">Source: Reserve Bank of India via DBIE; USD/INR: Federal Reserve via FRED</p>
+    <div class="actual-chart-plot-area-incl-legend"></div>
     <div class="margin">
         <div class="right-margin"></div>
         <div class="top-margin"></div>
@@ -12,11 +12,11 @@
     </div>
 </div>
 
-<style>
 .main {
+  --canvas-h: 1080px; /* change only this; extra height goes to the plot area */
   position: relative;
   width: 1920px;
-  height: 1080px;
+  height: var(--canvas-h);
   background: #FFFFFF;
 }
 .title {
@@ -27,7 +27,7 @@
   color: #000000;
   font-family: "Inter";
   font-size: 47.56px;
-  font-weight: 700;
+  font-weight: 800;
 }
 .subtitle {
   position: absolute;
@@ -38,22 +38,24 @@
   font-family: "Inter";
   font-size: 20.23px;
   font-weight: 400;
+  line-height: 24px;
 }
 .note {
   position: absolute;
   left: 60px;
-  top: 1002px;
+  top: calc(var(--canvas-h) - 78px);
   width: 1800px;
   color: #434343;
   font-family: "Inter";
   font-size: 16px;
   font-weight: 400;
   font-style: italic;
+  line-height: 20px;
 }
 .source {
   position: absolute;
   left: 60px;
-  top: 978px;
+  top: calc(var(--canvas-h) - 102px);
   width: 1800px;
   color: #434343;
   font-family: "Inter";
@@ -61,12 +63,12 @@
   font-weight: 400;
   font-style: italic;
 }
-.actual-chart-plot-area {
+.actual-chart-plot-area-incl-legend {
   position: absolute;
   left: 60px;
   top: 173px;
   width: 1800px;
-  height: 783px;
+  height: calc(var(--canvas-h) - 173px - 124px); /* 783px at 1080 */
   background: #D9D9D9;
 }
 .margin {
@@ -74,18 +76,16 @@
   left: 0px;
   top: 0px;
   width: 1920px;
-  height: 1080px;
+  height: var(--canvas-h);
 }
 .right-margin {
   position: absolute;
   left: 1860.12px;
-  top: 1080px;
-  transform: rotate(-90deg);
-  transform-origin: 0 0;
-  width: 1080px;
-  height: 0px;
+  top: var(--canvas-h);
   transform: rotate(-90deg);
   transform-origin: top left;
+  width: var(--canvas-h);
+  height: 0px;
   border: 0.5px solid #F17000;
 }
 .top-margin {
@@ -99,7 +99,7 @@
 .bottom-margin {
   position: absolute;
   left: 0px;
-  top: 1040px;
+  top: calc(var(--canvas-h) - 40px);
   width: 1920px;
   height: 0px;
   border: 0.5px solid #F17000;
@@ -107,13 +107,10 @@
 .left-margin {
   position: absolute;
   left: 60px;
-  top: 1080px;
-  transform: rotate(-90deg);
-  transform-origin: 0 0;
-  width: 1080px;
-  height: 0px;
+  top: var(--canvas-h);
   transform: rotate(-90deg);
   transform-origin: top left;
+  width: var(--canvas-h);
+  height: 0px;
   border: 0.5px solid #F17000;
 }
-</style>
