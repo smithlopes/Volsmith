@@ -70,7 +70,7 @@ RIGHT_MARGIN_PX = 1860
 BLUE = "#6b8fd1"
 ORANGE = "#e8856a"
 BG, INK, SUBTITLE_INK = "#ffffff", "#000000", "#000000"
-AXIS, GRID, FOOT = "#7f7f7f", "#b9b9b9", "#434343"
+AXIS, GRID, FOOT = "#7f7f7f", "#b9b9b9", "#8c8c8c"
 FONT_STACK = ("Inter", "DejaVu Sans", "Arial", "Helvetica", "Liberation Sans")
 
 # CSS px sizes from the spec converted to points
@@ -244,6 +244,7 @@ print(pd.DataFrame(
     {"full_bp": vol_full, "recent_bp": vol_recent, "obs": pd.Series(obs_count)}
 ).round(1))
 
+NOTE_TEXT = NOTE_TEXT.format(period=f"{first_obs:%d %b %Y} to {last_obs:%d %b %Y}")
 
 # =============================================================================
 # Analyst commentary (dynamic, fitted to two lines)
