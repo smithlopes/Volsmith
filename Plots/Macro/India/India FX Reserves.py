@@ -118,10 +118,8 @@ required_rbi_columns = {"row_no", "c1", "c3", "c5", "c7", "c11", "c13"}
 if not required_rbi_columns.issubset(reserves_raw.columns):
     raise ValueError(f"Unexpected RBI DBIE CSV columns: {list(reserves_raw.columns)}")
 
-# DBIE exports this bulletin table as a report layout: c1 is the date,
-# c5 is foreign currency assets in US$ millions, c7 is gold, c11 is SDRs,
-# and c13 is the IMF reserve tranche position (RTP), all in US$ millions.
-# Header and financial-year rows are discarded when their dates fail to parse.
+# DBIE's public CSV endpoint is a scraped copy of RBI's weekly report table.
+# It may lag the RBI release; the period parsed below is validated downstream.
 reserves = pd.DataFrame({
     "date": pd.to_datetime(reserves_raw["c1"], format="%d-%b-%Y", errors="coerce"),
     "total_reserves_usd_bn": to_number(reserves_raw["c3"]) / 1_000,
@@ -176,6 +174,8 @@ if COMPARISON_MODE == "yoy":
 else:
     latest_date_mask = reserves.index.to_period("Q") == latest_period
 latest_observation_date = reserves.loc[latest_date_mask].index.max()
+latest_period_end = latest_observation_date.to_period("Q").end_time.normalize()
+latest_period_is_partial = latest_observation_date < latest_period_end
 
 
 def reserve_share(component: str) -> float:
@@ -370,16 +370,21 @@ reserve_components = (
     ("rtp_reserves_usd_bn", PURPLE),
 )
 for component, color in reserve_components:
-    ax.bar(
-        dates,
-        chart_data[component],
-        width=bar_width_days,
-        bottom=bar_bottom,
-        color=color,
-        edgecolor="white",
-        linewidth=0.5,
-        zorder=3,
-    )
+    for i, (date, value, bottom) in enumerate(
+        zip(dates, chart_data[component], bar_bottom)
+    ):
+        is_partial_bar = i == len(dates) - 1 and latest_period_is_partial
+        ax.bar(
+            date,
+            value,
+            width=bar_width_days,
+            bottom=bottom,
+            color=color,
+            edgecolor="white",
+            linewidth=0.5,
+            alpha=0.6 if is_partial_bar else 1.0,
+            zorder=3,
+        )
     bar_bottom += chart_data[component]
 
 fx_ax = ax.twinx()
