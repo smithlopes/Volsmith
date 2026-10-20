@@ -45,9 +45,11 @@ SLIDE_TITLE = "Term Structure of Interest Rate Volatility"
 SOURCE_TEXT = "Source: Federal Reserve (H.15 Treasury constant maturities) via FRED"
 NOTE_TEXT = (
     "Note: Realized volatility is the standard deviation of daily changes in US "
-    "Treasury constant-maturity yields, in basis points, annualized by the square "
-    "root of 252. It is backward-looking and is not implied (MOVE) volatility. "
-    "Recent covers the one-year period ending on the run date."
+    "Treasury constant-maturity yields (bp), annualized by the square root of 252, "
+    "over {period}; Recent is the latest one year. It is backward-looking, not "
+    "implied (MOVE) volatility. Short-end volatility mainly reflects uncertainty "
+    "around monetary policy, while long-end volatility reflects uncertainty around "
+    "the real economy and inflation."
 )
 
 OUTPUT_DIR = Path(__file__).resolve().parent
