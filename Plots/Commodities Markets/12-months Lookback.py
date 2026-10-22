@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import importlib.util
 import sys
-import textwrap
 import time
 from pathlib import Path
 
@@ -437,11 +436,6 @@ if hist.empty:
 print(
     f"Yahoo Finance download completed in "
     f"{download_seconds:.2f} seconds."
-)
-
-print(
-    f"Raw observations returned: "
-    f"{len(hist):,}"
 )
 
 # =====================================================================
@@ -976,7 +970,7 @@ combined_df = combined_df.set_index(
 )
 
 # =====================================================================
-# PRINT MONTHLY RETURN CORRELATIONS
+# PREPARE MONTHLY RETURN CORRELATIONS
 # =====================================================================
 
 if monthly_return_series:
@@ -993,61 +987,6 @@ if monthly_return_series:
     correlation_items = list(
         correlation_df.columns
     )
-
-    correlation_column_width = 10
-    correlation_row_width = max(
-        12,
-        max(len(item) for item in correlation_items),
-    ) + 2
-    columns_per_block = 6
-
-    print()
-    print(
-        "Monthly return correlation matrix "
-        f"({start_date:%b %Y} to {end_date:%b %Y}; "
-        "blank diagonal; pairwise monthly observations):"
-    )
-
-    # Print column blocks so the complete matrix stays readable in a console
-    # while keeping every correlation column the same width.
-    for block_start in range(0, len(correlation_items), columns_per_block):
-        block_items = correlation_items[
-            block_start:block_start + columns_per_block
-        ]
-        wrapped_headers = [
-            textwrap.wrap(item, width=correlation_column_width)
-            for item in block_items
-        ]
-        header_height = max(len(lines) for lines in wrapped_headers)
-        print()
-        for header_line in range(header_height):
-            header_cells = []
-            for lines in wrapped_headers:
-                label = lines[header_line] if header_line < len(lines) else ""
-                header_cells.append(
-                    label.center(correlation_column_width)
-                )
-            row_heading = "Item" if header_line == 0 else ""
-            print(
-                row_heading.ljust(correlation_row_width)
-                + "".join(header_cells)
-            )
-
-        for row_item in correlation_items:
-            row_values = []
-            for column_item in block_items:
-                if row_item == column_item:
-                    cell = ""
-                else:
-                    value = correlation_df.loc[row_item, column_item]
-                    cell = f"{value:.2f}" if pd.notna(value) else ""
-                row_values.append(
-                    cell.center(correlation_column_width)
-                )
-            print(
-                row_item.ljust(correlation_row_width)
-                + "".join(row_values)
-            )
 
 month_cols = [
     column
@@ -2100,7 +2039,76 @@ for line, y_position in zip(data_note_lines, data_note_y_positions):
 resolved = font_manager.findfont(
     font_manager.FontProperties(family="sans-serif", weight="bold")
 )
+
+print(
+    f"Raw observations returned: {len(hist):,}"
+)
 print("Font used:", resolved)
+
+print()
+print()
+print(
+    "Monthly return correlation matrix "
+    f"({start_date:%b %Y} to {end_date:%b %Y}; "
+    "blank diagonal; pairwise monthly observations):"
+)
+
+if monthly_return_series:
+
+    correlation_column_width = max(
+        10,
+        max(
+            len(word)
+            for item in correlation_items
+            for word in item.split()
+        ) + 2,
+    )
+    correlation_row_width = max(
+        12,
+        max(len(item) for item in correlation_items),
+    ) + 2
+    wrapped_headers = [
+        item.split()
+        for item in correlation_items
+    ]
+    header_height = max(len(lines) for lines in wrapped_headers)
+    print()
+    for header_line in range(header_height):
+        header_cells = []
+        for lines in wrapped_headers:
+            line_offset = header_height - len(lines)
+            line_index = header_line - line_offset
+            label = lines[line_index] if 0 <= line_index < len(lines) else ""
+            header_cells.append(
+                label.rjust(correlation_column_width)
+            )
+        print(
+            "".ljust(correlation_row_width)
+            + "".join(header_cells)
+        )
+
+    print(
+        "-" * (
+            correlation_row_width
+            + correlation_column_width * len(correlation_items)
+        )
+    )
+
+    for row_item in correlation_items:
+        row_values = []
+        for column_item in correlation_items:
+            if row_item == column_item:
+                cell = ""
+            else:
+                value = correlation_df.loc[row_item, column_item]
+                cell = f"{value:.2f}" if pd.notna(value) else ""
+            row_values.append(
+                cell.rjust(correlation_column_width)
+            )
+        print(
+            row_item.ljust(correlation_row_width)
+            + "".join(row_values)
+        )
 
 
 

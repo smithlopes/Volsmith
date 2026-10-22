@@ -472,11 +472,6 @@ print(
     f"{download_seconds:.2f} seconds."
 )
 
-print(
-    f"Raw observations returned: "
-    f"{len(hist):,}"
-)
-
 # =====================================================================
 # NORMALISE YAHOO FINANCE DATA
 # =====================================================================
@@ -656,6 +651,7 @@ for missing_code in missing_returned_codes:
 # =====================================================================
 
 rows: list[dict[str, object]] = []
+monthly_return_series: dict[str, pd.Series] = {}
 
 requested_start_month = (
     start_date.to_period("M")
@@ -978,6 +974,12 @@ for sector_name, index_code in ALL_INDICES.items():
             row
         )
 
+        monthly_return_series[sector_name] = (
+            monthly_returns.loc[reporting_return_mask]
+            .dropna()
+            .astype(float)
+        )
+
     except Exception as exc:
 
         print(
@@ -1000,6 +1002,15 @@ if combined_df.empty:
 combined_df = combined_df.set_index(
     "Sector"
 )
+
+# =====================================================================
+# PREPARE MONTHLY RETURN CORRELATIONS
+# =====================================================================
+
+if monthly_return_series:
+    monthly_returns_for_corr = pd.concat(monthly_return_series, axis=1)
+    correlation_df = monthly_returns_for_corr.corr(min_periods=2)
+    correlation_items = list(correlation_df.columns)
 
 month_cols = [
     column
@@ -2051,7 +2062,55 @@ for line, y_position in zip(data_note_lines, data_note_y_positions):
 resolved = font_manager.findfont(
     font_manager.FontProperties(family="sans-serif", weight="bold")
 )
+
+print(f"Raw observations returned: {len(hist):,}")
 print("Font used:", resolved)
+
+print()
+print()
+print(
+    "Monthly return correlation matrix "
+    f"({start_date:%b %Y} to {end_date:%b %Y}; "
+    "blank diagonal; pairwise monthly observations):"
+)
+
+if monthly_return_series:
+    correlation_column_width = max(
+        10,
+        max(
+            len(word)
+            for item in correlation_items
+            for word in item.split()
+        ) + 2,
+    )
+    correlation_row_width = max(12, max(len(item) for item in correlation_items)) + 2
+    wrapped_headers = [
+        item.split()
+        for item in correlation_items
+    ]
+    header_height = max(len(lines) for lines in wrapped_headers)
+    print()
+    for header_line in range(header_height):
+        header_cells = []
+        for lines in wrapped_headers:
+            line_offset = header_height - len(lines)
+            line_index = header_line - line_offset
+            label = lines[line_index] if 0 <= line_index < len(lines) else ""
+            header_cells.append(label.rjust(correlation_column_width))
+        print("".ljust(correlation_row_width) + "".join(header_cells))
+
+    print("-" * (correlation_row_width + correlation_column_width * len(correlation_items)))
+
+    for row_item in correlation_items:
+        row_values = []
+        for column_item in correlation_items:
+            if row_item == column_item:
+                cell = ""
+            else:
+                value = correlation_df.loc[row_item, column_item]
+                cell = f"{value:.2f}" if pd.notna(value) else ""
+            row_values.append(cell.rjust(correlation_column_width))
+        print(row_item.ljust(correlation_row_width) + "".join(row_values))
 
 
 

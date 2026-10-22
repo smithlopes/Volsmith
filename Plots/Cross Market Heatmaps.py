@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from tempfile import TemporaryFile
 import time
 from pathlib import Path
 
@@ -12,7 +13,7 @@ ASSET_CLASS_DIRS = (
     PLOTS_DIR / "Equity Markets",
     PLOTS_DIR / "FX Markets",
 )
-EQUITY_START_DELAY_SECONDS = 10
+EQUITY_START_DELAY_SECONDS = 5
 
 
 def main() -> int:
@@ -27,7 +28,7 @@ def main() -> int:
         print("No asset-class scripts found.", file=sys.stderr)
         return 1
 
-    processes: list[tuple[Path, subprocess.Popen]] = []
+    processes: list[tuple[Path, subprocess.Popen, object]] = []
     equity_scripts_started = 0
 
     for script in scripts:
@@ -41,21 +42,41 @@ def main() -> int:
             time.sleep(EQUITY_START_DELAY_SECONDS)
 
         print(f"Starting: {script.relative_to(PLOTS_DIR)}", flush=True)
+        output_log = TemporaryFile(
+            mode="w+t",
+            encoding="utf-8",
+            errors="replace",
+        )
         process = subprocess.Popen(
             [sys.executable, str(script)],
             cwd=script.parent,
+            stdout=output_log,
+            stderr=subprocess.STDOUT,
         )
-        processes.append((script, process))
+        processes.append((script, process, output_log))
         if is_equity_script:
             equity_scripts_started += 1
 
     failed = False
-    for script, process in processes:
+    separator = "=" * 88
+    for script, process, output_log in processes:
         return_code = process.wait()
+        output_log.seek(0)
+        script_output = output_log.read()
+        relative_script = script.relative_to(PLOTS_DIR)
+
+        print(f"\n{separator}\nConsole output: {relative_script}\n{separator}")
+        if script_output:
+            sys.stdout.write(script_output)
+            if not script_output.endswith("\n"):
+                print()
+        print(separator, flush=True)
+        output_log.close()
+
         if return_code:
             failed = True
             print(
-                f"Failed ({return_code}): {script.relative_to(PLOTS_DIR)}",
+                f"Failed ({return_code}): {relative_script}",
                 file=sys.stderr,
             )
 
