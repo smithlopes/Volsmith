@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import textwrap
 import time
 from pathlib import Path
 
@@ -622,6 +623,7 @@ for missing_code in missing_returned_codes:
 # =====================================================================
 
 rows: list[dict[str, object]] = []
+monthly_return_series: dict[str, pd.Series] = {}
 
 requested_start_month = (
     start_date.to_period("M")
@@ -944,6 +946,12 @@ for sector_name, index_code in ALL_INDICES.items():
             row
         )
 
+        monthly_return_series[sector_name] = (
+            monthly_returns.loc[reporting_return_mask]
+            .dropna()
+            .astype(float)
+        )
+
     except Exception as exc:
 
         print(
@@ -966,6 +974,80 @@ if combined_df.empty:
 combined_df = combined_df.set_index(
     "Sector"
 )
+
+# =====================================================================
+# PRINT MONTHLY RETURN CORRELATIONS
+# =====================================================================
+
+if monthly_return_series:
+
+    monthly_returns_for_corr = pd.concat(
+        monthly_return_series,
+        axis=1,
+    )
+
+    correlation_df = monthly_returns_for_corr.corr(
+        min_periods=2,
+    )
+
+    correlation_items = list(
+        correlation_df.columns
+    )
+
+    correlation_column_width = 10
+    correlation_row_width = max(
+        12,
+        max(len(item) for item in correlation_items),
+    ) + 2
+    columns_per_block = 6
+
+    print()
+    print(
+        "Monthly return correlation matrix "
+        f"({start_date:%b %Y} to {end_date:%b %Y}; "
+        "blank diagonal; pairwise monthly observations):"
+    )
+
+    # Print column blocks so the complete matrix stays readable in a console
+    # while keeping every correlation column the same width.
+    for block_start in range(0, len(correlation_items), columns_per_block):
+        block_items = correlation_items[
+            block_start:block_start + columns_per_block
+        ]
+        wrapped_headers = [
+            textwrap.wrap(item, width=correlation_column_width)
+            for item in block_items
+        ]
+        header_height = max(len(lines) for lines in wrapped_headers)
+        print()
+        for header_line in range(header_height):
+            header_cells = []
+            for lines in wrapped_headers:
+                label = lines[header_line] if header_line < len(lines) else ""
+                header_cells.append(
+                    label.center(correlation_column_width)
+                )
+            row_heading = "Item" if header_line == 0 else ""
+            print(
+                row_heading.ljust(correlation_row_width)
+                + "".join(header_cells)
+            )
+
+        for row_item in correlation_items:
+            row_values = []
+            for column_item in block_items:
+                if row_item == column_item:
+                    cell = ""
+                else:
+                    value = correlation_df.loc[row_item, column_item]
+                    cell = f"{value:.2f}" if pd.notna(value) else ""
+                row_values.append(
+                    cell.center(correlation_column_width)
+                )
+            print(
+                row_item.ljust(correlation_row_width)
+                + "".join(row_values)
+            )
 
 month_cols = [
     column
