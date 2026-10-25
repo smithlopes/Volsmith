@@ -40,7 +40,7 @@ FLOW_DATA_URL = (
 # MoM is the default: monthly bars and change versus the previous month.
 COMPARISON_MODE = "mom"
 START_DATE = "2026-01-01"
-END_DATE = "2026-09-30"
+END_DATE = "2026-10-31"
 
 if COMPARISON_MODE not in {"mom", "qoq", "yoy"}:
     raise ValueError('COMPARISON_MODE must be "mom", "qoq", or "yoy".')
@@ -77,7 +77,7 @@ INK = "#000000"
 SUBTITLE_INK = "#000000"
 AXIS = "#7f7f7f"
 GRID = "#b9b9b9"
-FOOT = "#434343"
+FOOT = "#8c8c8c"
 FONT_STACK = (
     "Inter", "DejaVu Sans", "Arial", "Helvetica", "Liberation Sans",
 )
