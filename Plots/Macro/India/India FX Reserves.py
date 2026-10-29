@@ -1,4 +1,5 @@
-from io import BytesIO
+from io import BytesIO, StringIO
+import re
 import ssl
 from urllib.request import HTTPSHandler, Request, build_opener
 
@@ -22,8 +23,9 @@ from fontTools.varLib.instancer import instantiateVariableFont
 
 RBI_RESERVES_CSV_URL = (
     "https://data-api.dbie.rbihub.in/api/tables/"
-    "external_sector/r53_foreign_exchange_reserves_weekly/csv"
+    "external_sector/r53_foreign_exchange_reserves_weekly/csv?labels=1"
 )
+RBI_PRESS_RELEASES_URL = "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx"
 FRED_USDINR_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DEXINUS"
 
 # Set either to a date like "2015-01-01"; None uses all available data.
@@ -39,7 +41,8 @@ COMPARISON_NAME = "year-on-year" if COMPARISON_MODE == "yoy" else "quarter-on-qu
 
 SLIDE_TITLE = "India's Foreign Exchange Reserves Composition"
 SOURCE_TEXT = (
-    "Source: Reserve Bank of India via DBIE; USD/INR: Federal Reserve via FRED"
+    "Source: Reserve Bank of India, Weekly Statistical Supplement and DBIE; "
+    "USD/INR: Federal Reserve via FRED"
 )
 NOTE_TEXT = (
     "Note: Stacked bars show foreign currency assets, gold, SDRs and India's reserve "
@@ -106,6 +109,12 @@ def download_csv(url: str) -> pd.DataFrame:
         return pd.read_csv(BytesIO(response.read()))
 
 
+def download_text(url: str) -> str:
+    request = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with opener.open(request, timeout=30) as response:
+        return response.read().decode("utf-8", errors="replace")
+
+
 def to_number(values: pd.Series) -> pd.Series:
     return pd.to_numeric(
         values.astype(str).str.replace(",", "", regex=False).str.strip(),
@@ -119,7 +128,8 @@ if not required_rbi_columns.issubset(reserves_raw.columns):
     raise ValueError(f"Unexpected RBI DBIE CSV columns: {list(reserves_raw.columns)}")
 
 # DBIE's public CSV endpoint is a scraped copy of RBI's weekly report table.
-# It may lag the RBI release; the period parsed below is validated downstream.
+# The labels query avoids a stale CDN response; the RBI release below refreshes
+# the latest observation when the scrape itself has not caught up yet.
 reserves = pd.DataFrame({
     "date": pd.to_datetime(reserves_raw["c1"], format="%d-%b-%Y", errors="coerce"),
     "total_reserves_usd_bn": to_number(reserves_raw["c3"]) / 1_000,
@@ -133,6 +143,65 @@ if reserves.empty:
     raise ValueError("RBI DBIE returned no usable foreign currency or gold observations.")
 
 reserves = reserves.set_index("date").sort_index()
+
+# DBIE's downloadable table can lag RBI's weekly releases. Use the latest WSS
+# extract published on RBI's own site to refresh the most recent observation.
+release_index = download_text(RBI_PRESS_RELEASES_URL)
+release_match = re.search(
+    r"href=[\"']?BS_PressReleaseDisplay\.aspx\?prid=(\d+)[\"']?[^>]*>\s*"
+    r"Reserve Bank of India\s*[–-]\s*Bulletin Weekly Statistical Supplement\s*"
+    r"[–-]\s*Extract\s*</a>",
+    release_index,
+    flags=re.IGNORECASE,
+)
+if release_match is None:
+    raise ValueError("Could not find the latest RBI Weekly Statistical Supplement release.")
+
+release_html = download_text(
+    f"{RBI_PRESS_RELEASES_URL}?prid={release_match.group(1)}"
+)
+release_date_match = re.search(
+    r"As on\s+([A-Za-z]+\s+\d{1,2},\s+\d{4})", release_html,
+    flags=re.IGNORECASE,
+)
+if release_date_match is None:
+    raise ValueError("Could not read the observation date in RBI's latest reserve release.")
+rbi_release_date = pd.to_datetime(release_date_match.group(1), errors="raise")
+
+release_tables = pd.read_html(StringIO(release_html), match="Foreign Exchange Reserves")
+reserve_table = next(
+    (
+        table for table in release_tables
+        if table.shape[1] >= 3
+        and table.iloc[:, 0].astype(str).str.contains("Total Reserves", case=False).any()
+    ),
+    None,
+)
+if reserve_table is None:
+    raise ValueError("Could not find the reserve components in RBI's latest release.")
+
+release_values = {}
+for row_label, column in (
+    ("1 Total Reserves", "total_reserves_usd_bn"),
+    ("1.1 Foreign Currency Assets #", "fx_reserves_usd_bn"),
+    ("1.2 Gold", "gold_reserves_usd_bn"),
+    ("1.3 SDRs", "sdr_reserves_usd_bn"),
+    ("1.4 Reserve Position in the IMF", "rtp_reserves_usd_bn"),
+):
+    matches = reserve_table.loc[
+        reserve_table.iloc[:, 0].astype(str).str.strip().eq(row_label)
+    ]
+    if matches.empty:
+        raise ValueError(f"Missing {row_label} in RBI's latest reserve release.")
+    release_value = pd.to_numeric(
+        str(matches.iloc[0, 2]).replace(",", "").strip(), errors="coerce"
+    )
+    if pd.isna(release_value):
+        raise ValueError(f"Invalid value for {row_label} in RBI's latest reserve release.")
+    release_values[column] = release_value / 1_000
+
+reserves.loc[rbi_release_date, list(release_values)] = list(release_values.values())
+reserves = reserves.sort_index()
 
 fx_raw = download_csv(FRED_USDINR_CSV_URL)
 if not {"observation_date", "DEXINUS"}.issubset(fx_raw.columns):

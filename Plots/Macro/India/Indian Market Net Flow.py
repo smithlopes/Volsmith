@@ -1,3 +1,4 @@
+from io import BytesIO
 import json
 import ssl
 from urllib.request import HTTPSHandler, Request, build_opener
@@ -28,19 +29,19 @@ except ImportError as error:
 # Configuration
 # =============================================================================
 
-# Public, community-maintained daily archive of NSE cash-market FII/DII data.
-# The NSE report page itself exposes current/previous-session reports; this
-# archive preserves daily history so monthly, quarterly and annual flows can be
-# calculated without keeping a local data file.
+# Older daily history, retained for the period before the newer archive begins.
 FLOW_DATA_URL = (
     "https://raw.githubusercontent.com/MrChartist/fii-dii-data/main/data/history.json"
 )
+# Daily NSE sourced history; this archive is refreshed through the latest session.
+FLOW_HISTORY_CSV_URL = "https://downstox.com/api/fiidii/history.csv"
+NSE_LATEST_FLOW_URL = "https://www.nseindia.com/api/fiidiiTradeReact"
 
 # Choose comparison mode: "mom", "qoq", or "yoy".
 # MoM is the default: monthly bars and change versus the previous month.
 COMPARISON_MODE = "mom"
 START_DATE = "2026-01-01"
-END_DATE = "2026-10-31"
+END_DATE = None
 
 if COMPARISON_MODE not in {"mom", "qoq", "yoy"}:
     raise ValueError('COMPARISON_MODE must be "mom", "qoq", or "yoy".')
@@ -54,7 +55,7 @@ PERIOD_LABEL = {"mom": "month", "qoq": "quarter", "yoy": "year"}[COMPARISON_MODE
 
 SLIDE_TITLE = "India's FII and DII Net Market Flows"
 SOURCE_TEXT = (
-    "Source: NSE FII/FPI & DII cash-market data (NSE, BSE and MSEI); "
+    "Source: NSE FII/FPI & DII data; history via Downstox and MrChartist; "
     "Nifty 500: Yahoo Finance (^CRSLDX)"
 )
 NOTE_TEXT = (
@@ -126,6 +127,86 @@ flows = (
     .sort_index()
 )
 
+# Extend and refresh the older archive with session-level NSE data. The CSV
+# carries comment lines before its header, so skip those while parsing.
+history_request = Request(
+    FLOW_HISTORY_CSV_URL,
+    headers={"User-Agent": "Mozilla/5.0", "Accept": "text/csv,*/*"},
+)
+with opener.open(history_request, timeout=30) as response:
+    history_raw = pd.read_csv(BytesIO(response.read()), comment="#")
+
+history_columns = {
+    "Date", "FII_Net", "DII_Net", "FII_Buy", "FII_Sell", "DII_Buy", "DII_Sell"
+}
+if not history_columns.issubset(history_raw.columns):
+    raise ValueError(
+        f"Unexpected NSE daily history columns: {list(history_raw.columns)}"
+    )
+history_flows = history_raw.rename(columns={
+    "Date": "date", "FII_Net": "fii_net", "DII_Net": "dii_net",
+    "FII_Buy": "fii_buy", "FII_Sell": "fii_sell",
+    "DII_Buy": "dii_buy", "DII_Sell": "dii_sell",
+})
+history_flows["date"] = pd.to_datetime(history_flows["date"], errors="coerce")
+history_value_columns = [
+    "fii_net", "dii_net", "fii_buy", "fii_sell", "dii_buy", "dii_sell"
+]
+for column in history_value_columns:
+    history_flows[column] = pd.to_numeric(history_flows[column], errors="coerce")
+history_flows = history_flows.dropna(subset=["date", "fii_net", "dii_net"]).set_index("date")
+flows = pd.concat([flows, history_flows], axis=0).sort_index()
+flows = flows[~flows.index.duplicated(keep="last")]
+
+# The NSE report provides the current session's provisional figures directly.
+# Its endpoint is a current-session feed, so retain the historical archive and
+# replace matching dates with NSE's official values.
+nse_request = Request(
+    NSE_LATEST_FLOW_URL,
+    headers={
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json, text/plain, */*",
+        "Referer": "https://www.nseindia.com/reports/fii-dii",
+    },
+)
+with opener.open(nse_request, timeout=30) as response:
+    nse_records = json.loads(response.read().decode("utf-8"))
+
+if not isinstance(nse_records, list) or not nse_records:
+    raise ValueError("NSE returned no current FII/DII cash-market observations.")
+nse_latest = pd.DataFrame(nse_records)
+nse_required = {"date", "category", "buyValue", "sellValue", "netValue"}
+if not nse_required.issubset(nse_latest.columns):
+    raise ValueError(
+        f"Unexpected NSE FII/DII response columns: {list(nse_latest.columns)}"
+    )
+nse_latest["date"] = pd.to_datetime(nse_latest["date"], dayfirst=True, errors="coerce")
+for column in ("buyValue", "sellValue", "netValue"):
+    nse_latest[column] = pd.to_numeric(nse_latest[column], errors="coerce")
+nse_latest["category"] = nse_latest["category"].replace(
+    {"FII/FPI": "fii", "DII": "dii"}
+)
+nse_latest = nse_latest[nse_latest["category"].isin({"fii", "dii"})]
+nse_latest = nse_latest.dropna(subset=["date", "netValue"])
+if nse_latest.empty:
+    raise ValueError("NSE's current FII/DII response contained no usable observations.")
+
+latest_flows = nse_latest.pivot_table(
+    index="date", columns="category", values=["buyValue", "sellValue", "netValue"],
+    aggfunc="last",
+)
+latest_flows.columns = [f"{category}_{field}" for field, category in latest_flows.columns]
+latest_flows = latest_flows.rename(columns={
+    "fii_netValue": "fii_net", "dii_netValue": "dii_net",
+    "fii_buyValue": "fii_buy", "fii_sellValue": "fii_sell",
+    "dii_buyValue": "dii_buy", "dii_sellValue": "dii_sell",
+})
+for column in ("fii_net", "dii_net", "fii_buy", "fii_sell", "dii_buy", "dii_sell"):
+    if column not in latest_flows:
+        latest_flows[column] = pd.NA
+flows = pd.concat([flows, latest_flows], axis=0).sort_index()
+flows = flows[~flows.index.duplicated(keep="last")]
+
 if START_DATE is not None:
     flows = flows.loc[flows.index >= pd.Timestamp(START_DATE)]
 if END_DATE is not None:
@@ -144,7 +225,6 @@ flows[["fii_net", "dii_net"]] = flows[["fii_net", "dii_net"]].astype(float)
 period_flows = flows[flow_columns].resample(RESAMPLE_RULE).sum(min_count=1).dropna(
     subset=["fii_net", "dii_net"]
 )
-period_flows = period_flows.loc[period_flows.index <= flows.index.max()]
 if period_flows.empty:
     raise ValueError(f"No {FREQUENCY} FII/DII observations remain in the selected range.")
 
@@ -343,15 +423,20 @@ if len(period_flows) > 1:
     latest_combined = latest["fii_net"] + latest["dii_net"]
     latest_fii_action = "selling" if latest["fii_net"] < 0 else "buying"
     latest_dii_action = "buying" if latest["dii_net"] > 0 else "selling"
+    latest_period_coverage = (
+        f" MTD ({latest_session_count} sessions)" if COMPARISON_MODE == "mom" else ""
+    )
     if latest["fii_net"] < 0 < latest["dii_net"]:
         offset_phrase = "more than offset" if combined_net > 0 else "partly offset"
         latest_flow_summary = (
-            f"{latest_period_label}: DII buying {flow_amount(latest['dii_net'])} "
+            f"{latest_period_label}{latest_period_coverage}: DII buying "
+            f"{flow_amount(latest['dii_net'])} "
             f"{offset_phrase} FII selling {flow_amount(latest['fii_net'])}"
         )
     else:
         latest_flow_summary = (
-            f"{latest_period_label}: FII {latest_fii_action} {flow_amount(latest['fii_net'])}; "
+            f"{latest_period_label}{latest_period_coverage}: "
+            f"FII {latest_fii_action} {flow_amount(latest['fii_net'])}; "
             f"DII {latest_dii_action} {flow_amount(latest['dii_net'])}"
         )
     if nifty_range_change_pct is not None:
@@ -468,13 +553,7 @@ fig.text(px_x(LEFT_MARGIN_PX), px_y(TITLE_BASELINE_PX), SLIDE_TITLE,
          fontsize=TITLE_SIZE, fontproperties=title_font,
          fontweight="bold" if title_font is None else "normal",
          color=INK, ha="left", va="baseline")
-subtitle_text = (
-    "Jan 2026–Sep 2026: FIIs sold ₹378,393cr net; DIIs bought ₹497,140cr, "
-    "more than offsetting foreign outflows and leaving combined net buying of "
-    "₹118,747cr. Sep 2026: DII buying ₹76,030cr more than offset FII selling "
-    "₹44,013cr; Nifty 500 fell 5.9% over the period to 22,072, and the index "
-    "is 4.4% lower since Jan 2026."
-)
+subtitle_text = f"{current_line} {change_line}"
 subtitle_lines = wrap_to_margins(
     subtitle_text, SUBTITLE_SIZE, RIGHT_MARGIN_PX - LEFT_MARGIN_PX
 )
@@ -508,6 +587,7 @@ ax = fig.add_axes([
 ], facecolor="none")
 
 dates = mdates.date2num(period_flows.index.to_pydatetime())
+latest_period_is_partial = period_flows.index[-1] > pd.Timestamp.today().normalize()
 if COMPARISON_MODE == "mom":
     bar_width_days = 18
 elif COMPARISON_MODE == "qoq":
@@ -517,10 +597,14 @@ else:
 pair_offset_days = bar_width_days * 0.28
 single_bar_width = bar_width_days * 0.44
 
-ax.bar(dates - pair_offset_days, period_flows["fii_net"], width=single_bar_width,
-       color=GREEN, edgecolor="white", linewidth=0.5, zorder=3)
-ax.bar(dates + pair_offset_days, period_flows["dii_net"], width=single_bar_width,
-       color=BLUE, edgecolor="white", linewidth=0.5, zorder=3)
+for i, (date, fii_net, dii_net) in enumerate(zip(
+    dates, period_flows["fii_net"], period_flows["dii_net"]
+)):
+    bar_alpha = 0.6 if latest_period_is_partial and i == len(dates) - 1 else 1.0
+    ax.bar(date - pair_offset_days, fii_net, width=single_bar_width,
+           color=GREEN, edgecolor="white", linewidth=0.5, alpha=bar_alpha, zorder=3)
+    ax.bar(date + pair_offset_days, dii_net, width=single_bar_width,
+           color=BLUE, edgecolor="white", linewidth=0.5, alpha=bar_alpha, zorder=3)
 ax.axhline(0, color=AXIS, linewidth=1.2, zorder=2)
 
 nifty_ax = ax.twinx()
