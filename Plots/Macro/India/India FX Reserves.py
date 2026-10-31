@@ -243,6 +243,12 @@ if COMPARISON_MODE == "yoy":
 else:
     latest_date_mask = reserves.index.to_period("Q") == latest_period
 latest_observation_date = reserves.loc[latest_date_mask].index.max()
+first_period_mask = reserves.index.to_period("Q") == chart_data.index[0].to_period("Q")
+first_observation_date = reserves.loc[first_period_mask].index.max()
+NOTE_TEXT += (
+    f" Reserve data: {first_observation_date:%d %b %Y} to "
+    f"{latest_observation_date:%d %b %Y}."
+)
 latest_period_end = latest_observation_date.to_period("Q").end_time.normalize()
 latest_period_is_partial = latest_observation_date < latest_period_end
 
