@@ -25,7 +25,7 @@ GBPUSD_TICKER = "GBPUSD=X"  # US dollars per pound sterling
 MOVING_AVERAGE_DAYS = 50
 
 # Set either date to None to leave that end of the date range unrestricted.
-START_DATE = "2026-01-01"
+START_DATE = "2025-01-01"
 END_DATE = None
 
 SLIDE_TITLE = "Gold Prices with 50-Day Moving Average"
