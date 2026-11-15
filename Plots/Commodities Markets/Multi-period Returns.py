@@ -82,7 +82,7 @@ OUTPUT_DIR = Path(__file__).resolve().parent
 
 PNG_FILE = (
     OUTPUT_DIR
-    / "Global_Commodity_Returns_Heatmap.png"
+    / "Global_Commodity_Returns_Multi_Period_Heatmap.png"
 )
 
 # =====================================================================
@@ -623,6 +623,14 @@ for index_name, index_code in valid_indices.items():
                 ) * 100
 
             row[period_label] = period_return
+
+        if all(pd.isna(row[period_label]) for period_label in PERIOD_COLUMNS):
+            print(
+                f"Insufficient price history for {index_name}: "
+                f"{index_code}; the row will be omitted because no return "
+                "can be calculated."
+            )
+            continue
 
         rows.append(
             row
@@ -1308,5 +1316,11 @@ print("Font used:", resolved)
 # =====================================================================
 # DISPLAY
 # =====================================================================
+
+fig.savefig(
+    PNG_FILE,
+    dpi=300,
+    bbox_inches="tight",
+)
 
 plt.show()

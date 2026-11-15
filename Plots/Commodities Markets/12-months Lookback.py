@@ -66,7 +66,7 @@ OUTPUT_DIR = Path(__file__).resolve().parent
 
 PNG_FILE = (
     OUTPUT_DIR
-    / "Global_Commodity_Returns_Heatmap.png"
+    / "Global_Commodity_Returns_12M_Heatmap.png"
 )
 
 # =====================================================================
@@ -735,7 +735,8 @@ for sector_name, index_code in ALL_INDICES.items():
 
             print(
                 f"Insufficient monthly history for "
-                f"{sector_name}: {cleaned_index_code}"
+                f"{sector_name}: {cleaned_index_code}; "
+                "the row will be omitted because no return can be calculated."
             )
 
             continue
@@ -791,10 +792,6 @@ for sector_name, index_code in ALL_INDICES.items():
 
         reporting_prices_mask = (
             (
-                monthly_prices.index.to_period("M")
-                >= previous_month
-            )
-            & (
                 monthly_prices.index.to_period("M")
                 >= previous_month
             )
@@ -2116,5 +2113,11 @@ if monthly_return_series:
 # DISPLAY
 # =====================================================================
 
+
+fig.savefig(
+    PNG_FILE,
+    dpi=300,
+    bbox_inches="tight",
+)
 
 plt.show()

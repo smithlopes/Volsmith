@@ -657,23 +657,44 @@ one_month_ranking = (
     .sort_values(ascending=False)
 )
 
+one_day_ranking = (
+    insight_df["1D"]
+    .dropna()
+    .sort_values(ascending=False)
+)
+
+positive_one_year_count = int(
+    (insight_df["1Y"] > 0).sum()
+)
+
+one_year_observation_count = int(
+    insight_df["1Y"].notna().sum()
+)
+
 if (
     len(one_year_ranking) >= 2
     and len(ten_year_ranking) >= 2
     and len(one_month_ranking) >= 2
+    and len(one_day_ranking) >= 2
 ):
 
     subtitle = (
         f"{str(one_year_ranking.index[0])} led one-year returns at "
         f"{float(one_year_ranking.iloc[0]):+.1f}%, while "
         f"{str(one_year_ranking.index[-1])} lagged at "
-        f"{float(one_year_ranking.iloc[-1]):+.1f}%. "
+        f"{float(one_year_ranking.iloc[-1]):+.1f}%; "
+        f"{positive_one_year_count} of {one_year_observation_count} "
+        "markets gained over the year. "
         f"{str(ten_year_ranking.index[0])} delivered the strongest "
         f"ten-year return at "
-        f"{float(ten_year_ranking.iloc[0]):+.1f}%, and "
+        f"{float(ten_year_ranking.iloc[0]):+.1f}%. "
         f"{str(one_month_ranking.index[0])} led the latest one-month "
         f"performance at "
-        f"{float(one_month_ranking.iloc[0]):+.1f}%"
+        f"{float(one_month_ranking.iloc[0]):+.1f}%, while "
+        f"{str(one_month_ranking.index[-1])} returned "
+        f"{float(one_month_ranking.iloc[-1]):+.1f}%. "
+        f"The latest daily leader was {str(one_day_ranking.index[0])} "
+        f"at {float(one_day_ranking.iloc[0]):+.1f}%"
     )
 
 # =====================================================================
