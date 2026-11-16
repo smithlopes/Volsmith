@@ -14,6 +14,12 @@ ASSET_CLASS_DIRS = (
     PLOTS_DIR / "FX Markets",
 )
 EQUITY_START_DELAY_SECONDS = 5
+LOOKBACK_SCRIPT_NAMES = {
+    "12-month Lookback.py",
+    "12-months Lookback.py",
+}
+MULTI_PERIOD_SCRIPT_NAME = "Multi-period Returns.py"
+RUNNABLE_SCRIPT_NAMES = LOOKBACK_SCRIPT_NAMES | {MULTI_PERIOD_SCRIPT_NAME}
 
 
 def main() -> int:
@@ -21,11 +27,11 @@ def main() -> int:
         script
         for folder in ASSET_CLASS_DIRS
         for script in folder.glob("*.py")
-        if script.name != "Breadth of Market Growth.py"
+        if script.name in RUNNABLE_SCRIPT_NAMES
     )
 
     if not scripts:
-        print("No asset-class scripts found.", file=sys.stderr)
+        print("No lookback or multi-period scripts found.", file=sys.stderr)
         return 1
 
     processes: list[tuple[Path, subprocess.Popen, object]] = []

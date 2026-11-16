@@ -125,7 +125,9 @@ SECTORS = {
     "Coffee": "KC=F",
     "Cocoa": "CC=F",
     "Cotton": "CT=F",
-    "Orange Juice": "OJ=F",
+    # Yahoo's continuous OJ=F quote currently exposes only one historical
+    # bar. The active Jan-2027 NYB contract provides the required history.
+    "Orange Juice": "OJF27.NYB",
     "Live Cattle": "LE=F",
     "Feeder Cattle": "GF=F",
     "Lean Hogs": "HE=F",
@@ -1317,10 +1319,6 @@ print("Font used:", resolved)
 # DISPLAY
 # =====================================================================
 
-fig.savefig(
-    PNG_FILE,
-    dpi=300,
-    bbox_inches="tight",
-)
+
 
 plt.show()

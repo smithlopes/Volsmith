@@ -47,8 +47,10 @@ NOTE_LINE_SPACING = 0.016
 # YEAR = None -> Rolling 12 Months
 YEAR = None
 
-# True shows the latest 12 calendar months, including the current partial month.
-# False shows the prior 12 complete calendar months.
+# True shows the prior 12 complete calendar months plus the current month to date.
+# When today is month-end, the current month is treated as complete, so the
+# window contains 12 calendar months in total. False shows the prior 12
+# complete calendar months.
 INCLUDE_CURRENT_MONTH = True
 
 FONT_FAMILY = "Helvetica"
@@ -111,7 +113,9 @@ SECTORS = {
     "Coffee": "KC=F",
     "Cocoa": "CC=F",
     "Cotton": "CT=F",
-    "Orange Juice": "OJ=F",
+    # Yahoo's continuous OJ=F quote currently exposes only one historical
+    # bar. The active Jan-2027 NYB contract provides the required history.
+    "Orange Juice": "OJF27.NYB",
     "Live Cattle": "LE=F",
     "Feeder Cattle": "GF=F",
     "Lean Hogs": "HE=F",
@@ -241,7 +245,9 @@ else:
 
         end_date = today
 
-        start_date = today.to_period("M").start_time - pd.DateOffset(months=11)
+        current_month_end = today.to_period("M").end_time.normalize()
+        months_back = 11 if today == current_month_end else 12
+        start_date = today.to_period("M").start_time - pd.DateOffset(months=months_back)
 
     else:
 
@@ -2114,10 +2120,6 @@ if monthly_return_series:
 # =====================================================================
 
 
-fig.savefig(
-    PNG_FILE,
-    dpi=300,
-    bbox_inches="tight",
-)
+
 
 plt.show()

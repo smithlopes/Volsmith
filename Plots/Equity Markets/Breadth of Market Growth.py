@@ -35,8 +35,10 @@ SCRIPT_VERSION = "SIDE_BY_SIDE_PANELS_SLIDE_MATCH_v8_ARROW_PATH_2026-10-07"
 print(f"Running script version: {SCRIPT_VERSION}")
 
 YEAR: int | None = None
-# True uses the latest 12 calendar months, including the current partial month.
-# False uses the prior 12 completed calendar months.
+# True uses the prior 12 completed calendar months plus the current month to date.
+# When today is month-end, the current month is treated as complete, so the
+# window contains 12 calendar months in total. False uses the prior 12
+# completed calendar months.
 INCLUDE_CURRENT_MONTH = True
 SAVE_CSV = False
 DOWNLOAD_LOOKBACK_DAYS = 10
@@ -179,7 +181,9 @@ if YEAR is not None:
 else:
     if INCLUDE_CURRENT_MONTH:
         end_date = today
-        start_date = today.to_period("M").start_time - pd.DateOffset(months=11)
+        current_month_end = today.to_period("M").end_time.normalize()
+        months_back = 11 if today == current_month_end else 12
+        start_date = today.to_period("M").start_time - pd.DateOffset(months=months_back)
     else:
         end_date = today.replace(day=1) - pd.Timedelta(days=1)
         start_date = end_date.to_period("M").start_time - pd.DateOffset(months=11)
