@@ -1,6 +1,9 @@
 from io import BytesIO, StringIO
+import json
 import re
 import ssl
+import time
+from urllib.error import HTTPError, URLError
 from urllib.request import HTTPSHandler, Request, build_opener
 
 import certifi
@@ -27,6 +30,7 @@ RBI_RESERVES_CSV_URL = (
 )
 RBI_PRESS_RELEASES_URL = "https://www.rbi.org.in/Scripts/BS_PressReleaseDisplay.aspx"
 FRED_USDINR_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DEXINUS"
+FRANKFURTER_USDINR_URL = "https://api.frankfurter.app"
 
 # Set either to a date like "2015-01-01"; None uses all available data.
 START_DATE = "2023-01-01"
@@ -42,7 +46,7 @@ COMPARISON_NAME = "year-on-year" if COMPARISON_MODE == "yoy" else "quarter-on-qu
 SLIDE_TITLE = "India's Foreign Exchange Reserves Composition"
 SOURCE_TEXT = (
     "Source: Reserve Bank of India, Weekly Statistical Supplement and DBIE; "
-    "USD/INR: Federal Reserve via FRED"
+    "USD/INR: Federal Reserve via FRED (ECB reference rates fallback)"
 )
 NOTE_TEXT = (
     "Note: Stacked bars show foreign currency assets, gold, SDRs and India's reserve "
@@ -103,16 +107,40 @@ ssl_context = ssl.create_default_context(cafile=certifi.where())
 opener = build_opener(HTTPSHandler(context=ssl_context))
 
 
-def download_csv(url: str) -> pd.DataFrame:
+def download_bytes(url: str, *, attempts: int = 3, timeout: int = 20) -> bytes:
     request = Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with opener.open(request, timeout=30) as response:
-        return pd.read_csv(BytesIO(response.read()))
+    last_error = None
+    for attempt in range(attempts):
+        try:
+            with opener.open(request, timeout=timeout) as response:
+                return response.read()
+        except HTTPError as error:
+            # Retry temporary server errors, but fail immediately for bad URLs
+            # and other permanent HTTP errors.
+            if error.code < 500:
+                raise
+            last_error = error
+        except (TimeoutError, URLError, OSError) as error:
+            last_error = error
+
+        if attempt + 1 < attempts:
+            time.sleep(2 ** attempt)
+
+    raise RuntimeError(
+        f"Could not download {url} after {attempts} attempts."
+    ) from last_error
+
+
+def download_csv(
+    url: str, *, attempts: int = 3, timeout: int = 20
+) -> pd.DataFrame:
+    return pd.read_csv(
+        BytesIO(download_bytes(url, attempts=attempts, timeout=timeout))
+    )
 
 
 def download_text(url: str) -> str:
-    request = Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with opener.open(request, timeout=30) as response:
-        return response.read().decode("utf-8", errors="replace")
+    return download_bytes(url).decode("utf-8", errors="replace")
 
 
 def to_number(values: pd.Series) -> pd.Series:
@@ -120,6 +148,36 @@ def to_number(values: pd.Series) -> pd.Series:
         values.astype(str).str.replace(",", "", regex=False).str.strip(),
         errors="coerce",
     )
+
+
+def download_usd_inr() -> pd.DataFrame:
+    fred_url = FRED_USDINR_CSV_URL
+    if START_DATE is not None:
+        # The complete DEXINUS history starts in 1973 and can make the graph
+        # endpoint time out unnecessarily when only recent observations are needed.
+        fred_url += f"&cosd={START_DATE}"
+    if END_DATE is not None:
+        fred_url += f"&coed={END_DATE}"
+
+    try:
+        return download_csv(fred_url, attempts=1, timeout=8)
+    except RuntimeError:
+        # FRED's graph endpoint can be intermittently unreachable. Frankfurter
+        # publishes the same USD/INR direction from ECB reference rates and
+        # provides a keyless JSON endpoint suitable as a fallback.
+        start = START_DATE or "1999-01-04"
+        end = END_DATE or pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d")
+        fallback_url = f"{FRANKFURTER_USDINR_URL}/{start}..{end}?from=USD&to=INR"
+        payload = json.loads(download_bytes(fallback_url).decode("utf-8"))
+        return pd.DataFrame(
+            {
+                "observation_date": list(payload.get("rates", {})),
+                "DEXINUS": [
+                    values.get("INR")
+                    for values in payload.get("rates", {}).values()
+                ],
+            }
+        )
 
 
 reserves_raw = download_csv(RBI_RESERVES_CSV_URL)
@@ -203,7 +261,7 @@ for row_label, column in (
 reserves.loc[rbi_release_date, list(release_values)] = list(release_values.values())
 reserves = reserves.sort_index()
 
-fx_raw = download_csv(FRED_USDINR_CSV_URL)
+fx_raw = download_usd_inr()
 if not {"observation_date", "DEXINUS"}.issubset(fx_raw.columns):
     raise ValueError(f"Unexpected FRED CSV columns: {list(fx_raw.columns)}")
 
